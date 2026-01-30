@@ -14,61 +14,22 @@
   "contributes": {
     "commands": [
       {
-        "command": "include-what-you-use-iwyu.dry_run",
+        "command": "clang_time_tracer.analyze",
         "title": "Include What You Use: Dry Run"
       },
       {
-        "command": "include-what-you-use-iwyu.fix",
+        "command": "clang_time_tracer.build_and_analyze",
         "title": "Include What You Use: Fix Includes"
       }
     ],
     "configuration": {
-      "title": "Include What You Use",
+      "title": "Clang Time Tracer",
       "properties": {
-        "iwyu.compileCommands.path": {
+        "clangTimeTracer.compileCommands.path": {
           "type": "string",
           "default": "build",
           "description": "Path to the compile_commands.json.",
           "format": "path"
-        },
-        "iwyu.iwyu.path": {
-          "type": "string",
-          "default": "include-what-you-use",
-          "description": "Path to the include-what-you-use executable. If it's in your PATH, the default value is fine.",
-          "scope": "machine-overridable",
-          "format": "path"
-        },
-        "iwyu.iwyu.mappingFiles": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "default": [],
-          "description": "List of IWYU mapping files (.imp)",
-          "scope": "machine-overridable"
-        },
-        "iwyu.iwyu.additionalArgs": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "default": [],
-          "description": "Additional arguments to pass to IWYU (e.g., --verbose=3)"
-        },
-        "iwyu.fixIncludes.path": {
-          "type": "string",
-          "default": "fix_includes.py",
-          "description": "Path to the fix_includes python script.",
-          "scope": "machine-overridable",
-          "format": "path"
-        },
-        "iwyu.fixIncludes.additionalArgs": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "default": [],
-          "description": "Additional arguments to pass to fix_includes.py (e.g., --nosafe_headers)"
         }
       }
     }
