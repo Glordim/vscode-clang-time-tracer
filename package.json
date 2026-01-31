@@ -15,11 +15,11 @@
     "commands": [
       {
         "command": "clang_time_tracer.analyze",
-        "title": "Include What You Use: Dry Run"
+        "title": "Clang Time Tracer: Analyze"
       },
       {
         "command": "clang_time_tracer.build_and_analyze",
-        "title": "Include What You Use: Fix Includes"
+        "title": "Clang Time Tracer: Build and analyze"
       }
     ],
     "configuration": {

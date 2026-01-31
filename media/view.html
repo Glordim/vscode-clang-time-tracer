@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<style>
+		body {
+			margin: 0;
+			background: #1e1e1e;
+			color: white;
+		}
+
+		canvas {
+			display: block;
+			cursor: default;
+		}
+
+		#tooltip {
+			position: fixed;
+			display: none;
+			background: rgba(0, 0, 0, 0.9);
+			padding: 8px;
+			border: 1px solid #555;
+			pointer-events: none;
+		}
+
+		#resetBtn {
+			position: fixed;
+			top: 10px;
+			right: 10px;
+			z-index: 100;
+		}
+	</style>
+</head>
+
+<body>
+	<button id="resetBtn">Reset View</button>
+	<div id="tooltip"></div>
+	<canvas id="canvas"></canvas>
+	<script>
+		window.initialData = {{traceData}};
+	</script>
+	<script src="{{scriptUri}}"></script>
+</body>
+
+</html>
