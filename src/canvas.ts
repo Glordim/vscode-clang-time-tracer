@@ -38,9 +38,8 @@ interface ViewState {
 
 // --- Initialisation ---
 
-// Déclaration pour VS Code API
 declare function acquireVsCodeApi(): any;
-const vscode = acquireVsCodeApi();
+const vscode = (window as any).acquireVsCodeApi ? acquireVsCodeApi() : null;
 
 const canvas = document.getElementById('canvas') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
@@ -48,6 +47,8 @@ const tooltip = document.getElementById('tooltip') as HTMLDivElement;
 const resetBtn = document.getElementById('resetBtn') as HTMLButtonElement;
 
 let threads: Thread[] = [];
+let maxTraceTime = 0;
+let totalContentHeight = 0;
 
 let view: ViewState = {
 	x: 100,
@@ -57,31 +58,32 @@ let view: ViewState = {
 	trackSpacing: 40
 };
 
-// --- Logique ---
+// --- Logique de calcul ---
 
 function preprocess(data: { traceEvents: TraceEvent[] }): void {
-
-	console.log("Structure du JSON reçu :", Object.keys(data));
-
 	const events = data.traceEvents || [];
 	const threadMap: Record<string, Omit<ProcessedEvent, 'depth'>[]> = {};
 	const openEvents: Record<string, TraceEvent[]> = {};
 
-	// 1. Première passe : Unification
+	maxTraceTime = 0;
+
+	// 1. Unification (gestion des phases X, b, e)
 	events.forEach(e => {
 		if (e.tid === undefined) return;
 		const tidStr = e.tid.toString();
 		if (!threadMap[tidStr]) threadMap[tidStr] = [];
 
 		if (e.ph === 'X') {
+			const end = e.ts + (e.dur || 0);
 			threadMap[tidStr].push({
 				name: e.name,
 				detail: e.args?.detail || "",
 				start: e.ts,
 				dur: e.dur || 0,
-				end: e.ts + (e.dur || 0),
+				end: end,
 				tid: tidStr
 			});
+			if (end > maxTraceTime) maxTraceTime = end;
 		}
 		else if (e.ph === 'b') {
 			const key = `${tidStr}-${e.name}`;
@@ -101,11 +103,12 @@ function preprocess(data: { traceEvents: TraceEvent[] }): void {
 					end: e.ts,
 					tid: tidStr
 				});
+				if (e.ts > maxTraceTime) maxTraceTime = e.ts;
 			}
 		}
 	});
 
-	// 2. Deuxième passe : Hiérarchie
+	// 2. Hiérarchie (calcul des profondeurs / stack)
 	threads = Object.keys(threadMap).map(tid => {
 		const tEvents = (threadMap[tid] as ProcessedEvent[]).sort(
 			(a, b) => a.start - b.start || b.dur - a.dur
@@ -125,21 +128,48 @@ function preprocess(data: { traceEvents: TraceEvent[] }): void {
 
 		return { tid, events: tEvents, maxDepth };
 	});
+
+	// Calcul de la hauteur totale pour le clamping vertical
+	updateTotalHeight();
 }
 
-function shortenPath(text: string): string {
-	if (!text) return "";
-	const isPath = /[\\\/]/.test(text);
-	if (isPath) {
-		const parts = text.split(/[\\\/]/);
-		let lastPart = parts[parts.length - 1];
-		if (!lastPart && parts.length > 1) {
-			lastPart = parts[parts.length - 2];
-		}
-		return lastPart;
-	}
-	return text;
+function updateTotalHeight(): void {
+	totalContentHeight = 0;
+	threads.forEach(thread => {
+		totalContentHeight += (thread.maxDepth + 2) * view.rowHeight + view.trackSpacing;
+	});
 }
+
+/**
+ * Empêche la vue de sortir des limites des données
+ */
+function clampView(): void {
+	const marginX = 100;
+	const marginY = 50;
+	const contentWidth = maxTraceTime * view.scale;
+
+	// Clamp Horizontal
+	if (view.x > marginX) view.x = marginX;
+	if (contentWidth > canvas.width - marginX * 2) {
+		if (view.x + contentWidth < canvas.width - marginX) {
+			view.x = canvas.width - contentWidth - marginX;
+		}
+	} else {
+		view.x = marginX; // Si tout tient dans l'écran, on reste à gauche
+	}
+
+	// Clamp Vertical
+	if (view.y > marginY) view.y = marginY;
+	if (totalContentHeight > canvas.height - marginY * 2) {
+		if (view.y + totalContentHeight < canvas.height - marginY) {
+			view.y = canvas.height - totalContentHeight - marginY;
+		}
+	} else {
+		view.y = marginY;
+	}
+}
+
+// --- Rendu ---
 
 function getColor(name: string): string {
 	let hash = 0;
@@ -147,6 +177,12 @@ function getColor(name: string): string {
 		hash = name.charCodeAt(i) + ((hash << 5) - hash);
 	}
 	return `hsl(${Math.abs(hash % 360)}, 50%, 45%)`;
+}
+
+function shortenPath(text: string): string {
+	if (!text) return "";
+	const parts = text.split(/[\\\/]/);
+	return parts[parts.length - 1] || text;
 }
 
 function render(): void {
@@ -157,6 +193,7 @@ function render(): void {
 	let currentY = view.y;
 
 	threads.forEach(thread => {
+		// Titre du Thread
 		ctx.fillStyle = "#aaa";
 		ctx.font = "bold 12px sans-serif";
 		ctx.fillText(`Thread ${thread.tid}`, 10, currentY - 10);
@@ -166,28 +203,35 @@ function render(): void {
 			const w = ev.dur * view.scale;
 			const y = currentY + (ev.depth * view.rowHeight);
 
+			// Culling (ne pas dessiner ce qui est hors écran)
 			if (x + w < 0 || x > canvas.width) return;
 
+			// Dessin de la box
 			ctx.fillStyle = getColor(ev.name);
 			ctx.fillRect(x, y, Math.max(0.5, w), view.rowHeight - 1);
 
-			if (w > 10) {
+			// Dessin du texte (si la box est assez large)
+			if (w > 15) {
 				ctx.save();
 				ctx.beginPath();
 				ctx.rect(x, y, w, view.rowHeight);
 				ctx.clip();
 
-				ctx.font = "bold 11px sans-serif";
 				const textX = Math.max(x, 0) + 4;
+				ctx.font = "bold 11px sans-serif";
 
+				// On vérifie si on a la place d'écrire au moins le début du nom
 				if (textX < x + w - 5) {
+					// Nom principal
 					ctx.fillStyle = "white";
 					ctx.fillText(ev.name, textX, y + 16);
 
+					// Détail (le short path)
 					if (ev.detail) {
 						const nameWidth = ctx.measureText(ev.name).width;
-						ctx.fillStyle = "#e0e0e0";
+						ctx.fillStyle = "rgba(255, 255, 255, 0.7)"; // Un peu plus discret
 						ctx.font = "10px sans-serif";
+						// On affiche le détail décalé après le nom
 						ctx.fillText(shortenPath(ev.detail), textX + nameWidth + 8, y + 16);
 					}
 				}
@@ -195,6 +239,7 @@ function render(): void {
 			}
 		});
 
+		// Décalage pour le prochain thread
 		currentY += (thread.maxDepth + 2) * view.rowHeight + view.trackSpacing;
 	});
 }
@@ -214,6 +259,7 @@ window.addEventListener('mousemove', (e: MouseEvent) => {
 		view.x += e.clientX - lastMouse.x;
 		view.y += e.clientY - lastMouse.y;
 		lastMouse = { x: e.clientX, y: e.clientY };
+		clampView();
 		render();
 	} else {
 		updateTooltip(e);
@@ -224,14 +270,20 @@ window.addEventListener('mouseup', () => isDragging = false);
 
 canvas.addEventListener('wheel', (e: WheelEvent) => {
 	e.preventDefault();
-	const zoomIntensity = 0.1;
+	const zoomIntensity = 0.15;
 	const delta = e.deltaY > 0 ? (1 - zoomIntensity) : (1 + zoomIntensity);
 
 	const mouseWorldX = (e.clientX - view.x) / view.scale;
-	view.scale *= delta;
-	view.scale = Math.max(0.00001, Math.min(view.scale, 10));
+
+	// Limitation du dezoom : on ne peut pas dézoomer plus que la largeur de l'écran
+	const minScale = (canvas.width - 200) / maxTraceTime;
+	let newScale = view.scale * delta;
+	newScale = Math.max(minScale, Math.min(newScale, 20));
+
+	view.scale = newScale;
 	view.x = e.clientX - mouseWorldX * view.scale;
 
+	clampView();
 	render();
 }, { passive: false });
 
@@ -240,10 +292,8 @@ function updateTooltip(e: MouseEvent): void {
 	let currentY = view.y;
 
 	for (const thread of threads) {
-		const threadTop = currentY;
 		const threadBottom = currentY + (thread.maxDepth + 1) * view.rowHeight;
-
-		if (e.clientY >= threadTop && e.clientY <= threadBottom) {
+		if (e.clientY >= currentY && e.clientY <= threadBottom) {
 			found = thread.events.find(ev => {
 				const x = (ev.start * view.scale) + view.x;
 				const w = ev.dur * view.scale;
@@ -260,34 +310,32 @@ function updateTooltip(e: MouseEvent): void {
 		tooltip.style.display = 'block';
 		tooltip.style.left = (e.clientX + 15) + 'px';
 		tooltip.style.top = (e.clientY + 15) + 'px';
-		tooltip.innerHTML = `<strong>${found.name}</strong><br/>${(found.dur / 1000).toFixed(2)} ms<br/><small>${found.detail}</small>`;
+		tooltip.innerHTML = `<strong>${found.name}</strong><br/>${(found.dur / 1000).toFixed(3)} ms<br/><small>${found.detail}</small>`;
 	} else {
 		tooltip.style.display = 'none';
 	}
 }
 
 resetBtn.addEventListener('click', () => {
-	view.x = 100; view.y = 50; view.scale = 0.1;
+	view.x = 100; view.y = 50;
+	view.scale = (canvas.width - 200) / maxTraceTime;
+	clampView();
 	render();
 });
 
-window.addEventListener('resize', render);
+window.addEventListener('resize', () => {
+	render();
+	clampView();
+});
 
-// Écouter les données envoyées par l'extension
 window.addEventListener('message', event => {
 	const message = event.data;
-	switch (message.command) {
-		case 'update': // Cas où l'extension envoie une nouvelle trace
-			if (message.data) {
-				preprocess(message.data);
-				render();
-			}
-			break;
+	if (message.command === 'update' && message.data) {
+		preprocess(message.data);
+		render();
 	}
 });
 
-// Vérifier si des données ont été injectées directement dans le HTML au chargement
-// (Si tu as utilisé la technique window.initialData du message précédent)
 const globalData = (window as any).initialData;
 if (globalData) {
 	preprocess(globalData);
