@@ -22,10 +22,12 @@ function prepareArguments(entry: CompileEntry, extraArg: string): { exe: string,
 	let exe = "";
 
 	if (entry.arguments && entry.arguments.length > 0) {
-		[exe, ...args] = entry.arguments;
+		const [first, ...rest] = entry.arguments;
+		exe = first ?? "";
+		args = rest;
 	} else if (entry.command) {
 		const parts = entry.command.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [];
-		exe = parts[0];
+		exe = parts[0] ?? "";
 		args = parts.slice(1).map(arg => arg.replace(/^['"]|['"]$/g, ''));
 	}
 
@@ -115,7 +117,7 @@ export class CompilationDatabase implements vscode.Disposable {
 		const relPath = config.get<string>('compileCommands.path') || "";
 		const dbUri = vscode.Uri.joinPath(folder.uri, relPath, 'compile_commands.json');
 
-		if (!fs.existsSync(dbUri.fsPath)) return;
+		if (!fs.existsSync(dbUri.fsPath)) { return; }
 
 		try {
 			const content = await fs.promises.readFile(dbUri.fsPath, 'utf8');
@@ -152,7 +154,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 	const buildCmd = vscode.commands.registerCommand('clang_time_tracer.build_and_analyze', async () => {
 		const editor = vscode.window.activeTextEditor;
-		if (!editor) return;
+		if (!editor) { return; }
 
 		const entry = await db.getEntryForFile(editor.document.uri);
 		if (!entry) {
@@ -250,7 +252,7 @@ export class TraceVisualizerPanel {
 		this._panel.dispose();
 		while (this._disposables.length) {
 			const x = this._disposables.pop();
-			if (x) x.dispose();
+			if (x) { x.dispose(); }
 		}
 	}
 }
