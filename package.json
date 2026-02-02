@@ -2,13 +2,19 @@
   "name": "clang-time-tracer",
   "displayName": "Clang Time Tracer",
   "description": "",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "engines": {
     "vscode": "^1.108.1"
   },
   "categories": [
     "Other"
   ],
+  "publisher": "Glordim",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Glordim/vscode-clang-time-tracer.git"
+  },
+  "license": "MIT",
   "activationEvents": [],
   "main": "./dist/extension.js",
   "contributes": {
