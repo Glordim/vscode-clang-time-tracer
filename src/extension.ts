@@ -18,25 +18,31 @@ interface CompileEntry {
  * Prepares execution arguments and injects -ftime-trace if missing
  */
 function prepareArguments(entry: CompileEntry, extraArg: string): { exe: string, args: string[] } {
-	let args: string[] = [];
-	let exe = "";
+    let args: string[] = [];
+    let exe = "";
 
-	if (entry.arguments && entry.arguments.length > 0) {
-		const [first, ...rest] = entry.arguments;
-		exe = first ?? "";
-		args = rest;
-	} else if (entry.command) {
-		const parts = entry.command.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [];
-		exe = parts[0] ?? "";
-		args = parts.slice(1).map(arg => arg.replace(/^['"]|['"]$/g, ''));
-	}
+    if (entry.arguments && entry.arguments.length > 0) {
+        const [first, ...rest] = entry.arguments;
+        exe = first ?? "";
+        args = rest;
+    } else if (entry.command) {
+        const parts = entry.command.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [];
+        exe = parts[0] ?? "";
+        
+        args = parts.slice(1).map(arg => {
+            if (/^['"].*['"]$/.test(arg)) {
+                return arg.replace(/^['"]|['"]$/g, '');
+            }
+            return arg.replace(/"/g, ''); 
+        });
+    }
 
-	const hasTraceFlag = args.some(arg => arg.includes("-ftime-trace") || arg.includes("/clang:-ftime-trace"));
-	if (!hasTraceFlag) {
-		args.unshift(extraArg);
-	}
+    const hasTraceFlag = args.some(arg => arg.includes("-ftime-trace") || arg.includes("/clang:-ftime-trace"));
+    if (!hasTraceFlag) {
+        args.unshift(extraArg);
+    }
 
-	return { exe, args };
+    return { exe, args };
 }
 
 /**
