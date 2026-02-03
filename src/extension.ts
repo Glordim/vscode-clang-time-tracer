@@ -18,31 +18,31 @@ interface CompileEntry {
  * Prepares execution arguments and injects -ftime-trace if missing
  */
 function prepareArguments(entry: CompileEntry, extraArg: string): { exe: string, args: string[] } {
-    let args: string[] = [];
-    let exe = "";
+	let args: string[] = [];
+	let exe = "";
 
-    if (entry.arguments && entry.arguments.length > 0) {
-        const [first, ...rest] = entry.arguments;
-        exe = first ?? "";
-        args = rest;
-    } else if (entry.command) {
-        const parts = entry.command.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [];
-        exe = parts[0] ?? "";
-        
-        args = parts.slice(1).map(arg => {
-            if (/^['"].*['"]$/.test(arg)) {
-                return arg.replace(/^['"]|['"]$/g, '');
-            }
-            return arg.replace(/"/g, ''); 
-        });
-    }
+	if (entry.arguments && entry.arguments.length > 0) {
+		const [first, ...rest] = entry.arguments;
+		exe = first ?? "";
+		args = rest;
+	} else if (entry.command) {
+		const parts = entry.command.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [];
+		exe = parts[0] ?? "";
 
-    const hasTraceFlag = args.some(arg => arg.includes("-ftime-trace") || arg.includes("/clang:-ftime-trace"));
-    if (!hasTraceFlag) {
-        args.unshift(extraArg);
-    }
+		args = parts.slice(1).map(arg => {
+			if (/^['"].*['"]$/.test(arg)) {
+				return arg.replace(/^['"]|['"]$/g, '');
+			}
+			return arg.replace(/"/g, '');
+		});
+	}
 
-    return { exe, args };
+	const hasTraceFlag = args.some(arg => arg.includes("-ftime-trace") || arg.includes("/clang:-ftime-trace"));
+	if (!hasTraceFlag) {
+		args.unshift(extraArg);
+	}
+
+	return { exe, args };
 }
 
 /**
@@ -209,6 +209,51 @@ export class TraceVisualizerPanel {
 	private constructor(private readonly _panel: vscode.WebviewPanel, extensionUri: vscode.Uri, traceData: any) {
 		this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
 		this._panel.webview.html = this._getHtmlForWebview(this._panel.webview, extensionUri, traceData);
+		this._panel.webview.onDidReceiveMessage(message => {
+			switch (message.command) {
+				case 'openFile': {
+					const fullPath = message.path;
+
+					const locationMatch = fullPath.match(/(?::\d+){1,2}/);
+
+					let filePath = fullPath;
+					let line = 0;
+					let col = 0;
+
+					if (locationMatch) {
+						const endOfPathIndex = fullPath.indexOf(locationMatch[0]);
+						filePath = fullPath.substring(0, endOfPathIndex);
+
+						const parts = locationMatch[0].split(':').filter(Boolean);
+						if (parts[0]) { line = Math.max(0, parseInt(parts[0], 10) - 1); }
+						if (parts[1]) { col = Math.max(0, parseInt(parts[1], 10) - 1); }
+					} else {
+						filePath = fullPath.split(' <')[0];
+					}
+
+					const uri = vscode.Uri.file(filePath.trim());
+					vscode.workspace.openTextDocument(uri).then(doc => {
+						const pos = new vscode.Position(line, col);
+						const selection = new vscode.Selection(pos, pos);
+
+						vscode.window.showTextDocument(doc, { selection }).then(editor => {
+							editor.revealRange(selection, vscode.TextEditorRevealType.InCenter);
+						});
+					}, err => {
+						vscode.window.showErrorMessage("Unable to open file: " + filePath);
+					});
+					return;
+				}
+				case 'copyPath': {
+					const endIdx = message.path.search(/:|<| /);
+					const cleanPath = endIdx !== -1 ? message.path.substring(0, endIdx) : message.path;
+
+					vscode.env.clipboard.writeText(cleanPath.trim());
+					vscode.window.setStatusBarMessage("File path copied!", 2000);
+					return;
+				}
+			}
+		});
 	}
 
 	public static createOrShow(extensionUri: vscode.Uri, tracePath: string) {

@@ -12,7 +12,7 @@ const CONFIG = {
     VIEW: {
         MARGIN_SIDE: 40,
         DEFAULT_ROW_HEIGHT: 24,
-		DEFAULT_TRACK_SPACING: 30,
+        DEFAULT_TRACK_SPACING: 30,
         ZOOM_SENSITIVITY: 0.15,
         MAX_SCALE: 10000
     },
@@ -73,10 +73,13 @@ const vscode = typeof (window as any).acquireVsCodeApi === 'function' ? (window 
 const canvas = document.getElementById('canvas') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
 const tooltip = document.getElementById('tooltip') as HTMLDivElement;
+const contextMenu = document.getElementById('context-menu') as HTMLDivElement;
 
 let threads: Thread[] = [];
 let maxTraceTime = 0;
 let totalContentHeight = 0;
+let selectedEvent: ProcessedEvent | null = null;
+let rightClickedEvent: ProcessedEvent | null = null;
 
 let view: ViewState = {
     x: CONFIG.VIEW.MARGIN_SIDE,
@@ -91,7 +94,7 @@ function getClientWidth(): number {
 }
 
 function resetView(): void {
-    if (maxTraceTime <= 0) {return;}
+    if (maxTraceTime <= 0) { return; }
 
     canvas.width = getClientWidth();
     canvas.height = window.innerHeight;
@@ -116,9 +119,9 @@ function preprocess(data: { traceEvents: TraceEvent[] }): void {
     maxTraceTime = 0;
 
     events.forEach(e => {
-        if (e.tid === undefined) {return;}
+        if (e.tid === undefined) { return; }
         const tidStr = e.tid.toString();
-        if (!threadMap[tidStr]) {threadMap[tidStr] = { sources: [], main: [] };}
+        if (!threadMap[tidStr]) { threadMap[tidStr] = { sources: [], main: [] }; }
 
         const isSource = e.cat === "Source" || e.name === "Source";
 
@@ -133,13 +136,13 @@ function preprocess(data: { traceEvents: TraceEvent[] }): void {
                 tid: tidStr,
                 depth: 0
             };
-            if (isSource) {threadMap[tidStr].sources.push(proc);}
-            else {threadMap[tidStr].main.push(proc);}
-            if (end > maxTraceTime) {maxTraceTime = end;}
+            if (isSource) { threadMap[tidStr].sources.push(proc); }
+            else { threadMap[tidStr].main.push(proc); }
+            if (end > maxTraceTime) { maxTraceTime = end; }
         }
         else if (e.ph === 'b') {
             const key = `${tidStr}-${e.name}`;
-            if (!openEvents[key]) {openEvents[key] = [];}
+            if (!openEvents[key]) { openEvents[key] = []; }
             openEvents[key].push(e);
         }
         else if (e.ph === 'e') {
@@ -155,9 +158,9 @@ function preprocess(data: { traceEvents: TraceEvent[] }): void {
                     tid: tidStr,
                     depth: 0
                 };
-                if (isSource) {threadMap[tidStr].sources.push(proc);}
-                else {threadMap[tidStr].main.push(proc);}
-                if (e.ts > maxTraceTime) {maxTraceTime = e.ts;}
+                if (isSource) { threadMap[tidStr].sources.push(proc); }
+                else { threadMap[tidStr].main.push(proc); }
+                if (e.ts > maxTraceTime) { maxTraceTime = e.ts; }
             }
         }
     });
@@ -209,16 +212,16 @@ function clampView(): void {
     if (contentWidth > availableWidth - (CONFIG.VIEW.MARGIN_SIDE * 2)) {
         const minX = availableWidth - contentWidth - CONFIG.VIEW.MARGIN_SIDE;
         const maxX = CONFIG.VIEW.MARGIN_SIDE;
-        if (view.x > maxX) {view.x = maxX;}
-        if (view.x < minX) {view.x = minX;}
+        if (view.x > maxX) { view.x = maxX; }
+        if (view.x < minX) { view.x = minX; }
     } else {
         view.x = CONFIG.VIEW.MARGIN_SIDE;
     }
 
     const minY = canvas.height - totalContentHeight - 40;
     if (totalContentHeight > canvas.height - marginY) {
-        if (view.y > marginY) {view.y = marginY;}
-        if (view.y < minY) {view.y = minY;}
+        if (view.y > marginY) { view.y = marginY; }
+        if (view.y < minY) { view.y = minY; }
     } else {
         view.y = marginY;
     }
@@ -235,7 +238,7 @@ function getColor(name: string): string {
 }
 
 function shortenPath(text: string): string {
-    if (!text) {return "";}
+    if (!text) { return ""; }
     const parts = text.split(/[\\\/]/);
     return parts[parts.length - 1] || text;
 }
@@ -256,9 +259,9 @@ function renderTimeline(): void {
     const pow = Math.pow(10, log);
 
     let step = pow;
-    if (targetTimeGap / pow > 5) {step = 5 * pow;}
-    else if (targetTimeGap / pow > 2.5) {step = 2.5 * pow;}
-    else if (targetTimeGap / pow > 2) {step = 2 * pow;}
+    if (targetTimeGap / pow > 5) { step = 5 * pow; }
+    else if (targetTimeGap / pow > 2.5) { step = 2.5 * pow; }
+    else if (targetTimeGap / pow > 2) { step = 2 * pow; }
 
     const startTime = (0 - view.x) / view.scale;
     const endTime = (canvas.width - view.x) / view.scale;
@@ -268,7 +271,7 @@ function renderTimeline(): void {
 
     for (let t = firstTick; t <= endTime; t += step) {
         const x = t * view.scale + view.x;
-        if (x < 0 || x > canvas.width) {continue;}
+        if (x < 0 || x > canvas.width) { continue; }
 
         ctx.beginPath();
         ctx.moveTo(x, 10);
@@ -293,7 +296,7 @@ function drawEvent(ev: ProcessedEvent, rowOffsetY: number) {
     const w = ev.dur * view.scale;
     const y = rowOffsetY + (ev.depth * view.rowHeight);
 
-    if (x + w < 0 || x > canvas.width || y + view.rowHeight < 0 || y > canvas.height) {return;}
+    if (x + w < 0 || x > canvas.width || y + view.rowHeight < 0 || y > canvas.height) { return; }
 
     const rectH = view.rowHeight - 1;
     const rectW = Math.max(0.5, w);
@@ -302,6 +305,14 @@ function drawEvent(ev: ProcessedEvent, rowOffsetY: number) {
     ctx.beginPath();
     ctx.roundRect(x, y, rectW, rectH, CONFIG.RENDERING.ROUNDING);
     ctx.fill();
+
+    if (selectedEvent === ev) {
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.fillStyle = "rgba(255, 255, 255, 0.2)";
+        ctx.fill();
+    }
 
     if (w > CONFIG.RENDERING.MIN_WIDTH_FOR_TEXT) {
         ctx.save();
@@ -375,9 +386,11 @@ let isDragging = false;
 let lastMouse = { x: 0, y: 0 };
 
 canvas.addEventListener('mousedown', (e: MouseEvent) => {
-    isDragging = true;
-    lastMouse = { x: e.clientX, y: e.clientY };
-    canvas.style.cursor = 'grabbing';
+    if (e.button === 0) {
+        isDragging = true;
+        lastMouse = { x: e.clientX, y: e.clientY };
+        canvas.style.cursor = 'grabbing';
+    }
 });
 
 window.addEventListener('mousemove', (e: MouseEvent) => {
@@ -397,6 +410,52 @@ window.addEventListener('mouseup', () => {
     canvas.style.cursor = 'default';
 });
 
+canvas.addEventListener('click', (e: MouseEvent) => {
+    const rect = canvas.getBoundingClientRect();
+    const ev = getEventAtPosition(e.clientX - rect.left, e.clientY - rect.top);
+    if (ev !== selectedEvent) {
+        selectedEvent = ev;
+        render();
+    }
+});
+
+canvas.addEventListener('dblclick', (e: MouseEvent) => {
+    const rect = canvas.getBoundingClientRect();
+    const ev = getEventAtPosition(e.clientX - rect.left, e.clientY - rect.top);
+
+    if (ev && ev.detail && vscode) {
+        vscode.postMessage({
+            command: 'openFile',
+            path: ev.detail
+        });
+    }
+});
+
+canvas.addEventListener('contextmenu', (e: MouseEvent) => {
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    rightClickedEvent = getEventAtPosition(mouseX, mouseY);
+
+    if (rightClickedEvent) {
+        selectedEvent = rightClickedEvent;
+        render();
+
+        tooltip.style.display = 'none';
+        contextMenu.style.display = 'block';
+        contextMenu.style.left = `${e.clientX}px`;
+        contextMenu.style.top = `${e.clientY}px`;
+    } else {
+        contextMenu.style.display = 'none';
+    }
+});
+
+window.addEventListener('click', () => {
+    contextMenu.style.display = 'none';
+});
+
 canvas.addEventListener('wheel', (e: WheelEvent) => {
     e.preventDefault();
     const delta = e.deltaY > 0 ? (1 - CONFIG.VIEW.ZOOM_SENSITIVITY) : (1 + CONFIG.VIEW.ZOOM_SENSITIVITY);
@@ -413,7 +472,31 @@ canvas.addEventListener('wheel', (e: WheelEvent) => {
     render();
 }, { passive: false });
 
+function getEventAtPosition(mx: number, my: number): ProcessedEvent | null {
+    let currentY = view.y;
+    for (const thread of threads) {
+        const sourceH = (thread.maxSourceDepth + 1) * view.rowHeight;
+        const mainH = (thread.maxMainDepth + 1) * view.rowHeight;
+        if (my >= currentY + 20 && my <= currentY + 20 + sourceH) {
+            const found = thread.sourceEvents.find(ev => isHit(ev, mx, my, currentY + 20));
+            if (found) { return found; }
+        }
+        const mainOffsetY = currentY + 20 + sourceH + 10;
+        if (my >= mainOffsetY && my <= mainOffsetY + mainH) {
+            const found = thread.mainEvents.find(ev => isHit(ev, mx, my, mainOffsetY));
+            if (found) { return found; }
+        }
+        currentY += 20 + sourceH + 10 + mainH + view.trackSpacing;
+    }
+    return null;
+}
+
 function updateTooltip(e: MouseEvent): void {
+    if (contextMenu.style.display === 'block') {
+        tooltip.style.display = 'none';
+        return;
+    }
+
     const rect = canvas.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
@@ -423,26 +506,7 @@ function updateTooltip(e: MouseEvent): void {
         return;
     }
 
-    let found: ProcessedEvent | undefined = undefined;
-    let currentY = view.y;
-
-    for (const thread of threads) {
-        const sourceH = (thread.maxSourceDepth + 1) * view.rowHeight;
-        const mainH = (thread.maxMainDepth + 1) * view.rowHeight;
-        
-        // Check Source area
-        if (mouseY >= currentY + 20 && mouseY <= currentY + 20 + sourceH) {
-            found = thread.sourceEvents.find(ev => isHit(ev, mouseX, mouseY, currentY + 20));
-        }
-        
-        // Check Main area
-        if (!found && mouseY >= currentY + 20 + sourceH + 10 && mouseY <= currentY + 20 + sourceH + 10 + mainH) {
-            found = thread.mainEvents.find(ev => isHit(ev, mouseX, mouseY, currentY + 20 + sourceH + 10));
-        }
-
-        if (found) {break;}
-        currentY += 20 + sourceH + 10 + mainH + view.trackSpacing;
-    }
+    const found = getEventAtPosition(mouseX, mouseY);
 
     if (found) {
         tooltip.style.display = 'block';
@@ -454,8 +518,8 @@ function updateTooltip(e: MouseEvent): void {
         let posX = e.clientX + 15;
         let posY = e.clientY + 15;
 
-        if (posX + tooltipWidth > window.innerWidth) {posX = e.clientX - tooltipWidth - 15;}
-        if (posY + tooltipHeight > window.innerHeight) {posY = e.clientY - tooltipHeight - 15;}
+        if (posX + tooltipWidth > window.innerWidth) { posX = e.clientX - tooltipWidth - 15; }
+        if (posY + tooltipHeight > window.innerHeight) { posY = e.clientY - tooltipHeight - 15; }
 
         tooltip.style.left = posX + 'px';
         tooltip.style.top = posY + 'px';
@@ -470,6 +534,18 @@ function isHit(ev: ProcessedEvent, mx: number, my: number, offsetY: number): boo
     const y = offsetY + (ev.depth * view.rowHeight);
     return mx >= x && mx <= x + w && my >= y && my <= y + (view.rowHeight - 1);
 }
+
+document.getElementById('menu-open-file')?.addEventListener('click', () => {
+    if (rightClickedEvent?.detail && vscode) {
+        vscode.postMessage({ command: 'openFile', path: rightClickedEvent.detail });
+    }
+});
+
+document.getElementById('menu-copy-path')?.addEventListener('click', () => {
+    if (rightClickedEvent?.detail && vscode) {
+        vscode.postMessage({ command: 'copyPath', path: rightClickedEvent.detail });
+    }
+});
 
 window.addEventListener('resize', () => {
     canvas.width = window.innerWidth;
