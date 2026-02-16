@@ -2,7 +2,7 @@
   "name": "clang-time-tracer",
   "displayName": "Clang Time Tracer",
   "description": "",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "engines": {
     "vscode": "^1.108.1"
   },
@@ -19,10 +19,6 @@
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
-      {
-        "command": "clang_time_tracer.analyze",
-        "title": "Clang Time Tracer: Analyze"
-      },
       {
         "command": "clang_time_tracer.build_and_analyze",
         "title": "Clang Time Tracer: Build and analyze"
