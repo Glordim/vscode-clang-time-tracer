@@ -9,7 +9,7 @@
   "categories": [
     "Other"
   ],
-  "publisher": "Glordim",
+  "publisher": "AnthonyTuffraudGlordim",
   "repository": {
     "type": "git",
     "url": "https://github.com/Glordim/vscode-clang-time-tracer.git"
