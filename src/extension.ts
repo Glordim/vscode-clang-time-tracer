@@ -203,7 +203,7 @@ export function activate(context: vscode.ExtensionContext) {
 // --- Webview Panel ---
 
 export class TraceVisualizerPanel {
-	public static currentPanel: TraceVisualizerPanel | undefined;
+	private static _openPanels: Set<TraceVisualizerPanel> = new Set();
 	private readonly _disposables: vscode.Disposable[] = [];
 
 	private constructor(private readonly _panel: vscode.WebviewPanel, extensionUri: vscode.Uri, traceData: any) {
@@ -259,16 +259,21 @@ export class TraceVisualizerPanel {
 	public static createOrShow(extensionUri: vscode.Uri, tracePath: string) {
 		try {
 			const traceData = JSON.parse(fs.readFileSync(tracePath, 'utf8'));
+			const baseTitle = `Time trace: ${path.basename(tracePath, '.json')}`;
 
-			if (this.currentPanel) {
-				this.currentPanel._panel.reveal();
-				this.currentPanel._panel.webview.postMessage({ command: 'update', data: traceData });
-				return;
+			let finalTitle = baseTitle;
+
+			const existingTabs = vscode.window.tabGroups.all
+				.flatMap(group => group.tabs)
+				.filter(tab => tab.label.startsWith(baseTitle));
+
+			if (existingTabs.length > 0) {
+				finalTitle = `${baseTitle} #${existingTabs.length + 1}`;
 			}
 
 			const panel = vscode.window.createWebviewPanel(
 				'ClangTimeTrace',
-				`Time trace: ${path.basename(tracePath, '.json')}`,
+				finalTitle,
 				vscode.ViewColumn.Two,
 				{
 					enableScripts: true,
@@ -280,7 +285,9 @@ export class TraceVisualizerPanel {
 				}
 			);
 
-			this.currentPanel = new TraceVisualizerPanel(panel, extensionUri, traceData);
+			const newPanel = new TraceVisualizerPanel(panel, extensionUri, traceData);
+			this._openPanels.add(newPanel);
+
 		} catch (err) {
 			vscode.window.showErrorMessage(`Failed to load trace file: ${err}`);
 		}
@@ -299,7 +306,7 @@ export class TraceVisualizerPanel {
 	}
 
 	public dispose() {
-		TraceVisualizerPanel.currentPanel = undefined;
+		TraceVisualizerPanel._openPanels.delete(this);
 		this._panel.dispose();
 		while (this._disposables.length) {
 			const x = this._disposables.pop();
