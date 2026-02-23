@@ -80,6 +80,188 @@ function getTraceFilePath(entry: CompileEntry, args: string[]): string {
 		: path.resolve(entry.directory, tracePath);
 }
 
+async function pickFolderIntegrated(): Promise<vscode.Uri | undefined> {
+	const root = vscode.workspace.workspaceFolders?.[0];
+	const activeEditor = vscode.window.activeTextEditor;
+
+	let currentPath: string;
+	if (activeEditor && !activeEditor.document.isUntitled) {
+		currentPath = path.dirname(activeEditor.document.uri.fsPath);
+	} else if (root) {
+		currentPath = root.uri.fsPath;
+	} else {
+		return undefined;
+	}
+
+	while (true) {
+		const items: vscode.QuickPickItem[] = [
+			{
+				label: "$(check) Select this folder",
+				detail: currentPath,
+				alwaysShow: true
+			},
+			{ label: "", kind: vscode.QuickPickItemKind.Separator }
+		];
+
+		try {
+			const files = await fs.promises.readdir(currentPath, { withFileTypes: true });
+
+			const dirs = files
+				.filter(f => f.isDirectory() && !f.name.startsWith('.'))
+				.sort((a, b) => a.name.localeCompare(b.name))
+				.map(f => ({
+					label: "$(folder) " + f.name,
+					description: path.join(currentPath, f.name)
+				}));
+
+			const parentDir = path.dirname(currentPath);
+			if (parentDir !== currentPath) {
+				items.push({
+					label: "$(arrow-left) Go back",
+					description: parentDir
+				});
+			}
+
+			items.push(...dirs);
+
+			const selection = await vscode.window.showQuickPick(items, {
+				placeHolder: `Currently in: ${path.basename(currentPath) || currentPath}`,
+				ignoreFocusOut: true,
+				matchOnDescription: true
+			});
+
+			if (!selection) { return undefined; }
+
+			if (selection.label === "$(check) Select this folder") {
+				return vscode.Uri.file(currentPath);
+			} else {
+				currentPath = selection.description!;
+			}
+		} catch (err) {
+			vscode.window.showErrorMessage(`Error reading folder: ${err}`);
+			return undefined;
+		}
+	}
+}
+
+async function buildEntry(entry: CompileEntry, outputChannel: vscode.OutputChannel): Promise<[number, string]> {
+	const isClangCl = (entry.command || entry.arguments?.[0] || "").includes('clang-cl');
+	const extraArg = isClangCl ? "/clang:-ftime-trace" : "-ftime-trace";
+
+	const { exe, args } = prepareArguments(entry, extraArg);
+	const tracePath = getTraceFilePath(entry, args);
+
+	outputChannel.clear();
+	outputChannel.show(true);
+
+	outputChannel.appendLine(`[CWD] ${entry.directory}`);
+	outputChannel.appendLine(`[Exec] ${exe} ${args.join(' ')}`);
+
+	return new Promise<[number, string]>((resolve) => {
+		const cp = spawn(exe, args, { cwd: entry.directory });
+
+		cp.stdout?.on('data', d => outputChannel.append(d.toString()));
+		cp.stderr?.on('data', d => outputChannel.append(d.toString()));
+
+		cp.on('close', (code) => {
+			const exitCode = code ?? -1;
+
+			if (code !== 0) {
+				vscode.window.showErrorMessage(`Compilation failed with exit code ${code}`);
+			}
+
+			resolve([exitCode, tracePath]);
+		});
+
+		cp.on('error', (err) => {
+			outputChannel.appendLine(`[System Error] ${err.message}`);
+			resolve([-1, tracePath]);
+		});
+	});
+}
+
+async function buildMultipleEntries(entries: CompileEntry[], outputChannel: vscode.OutputChannel) {
+	const total = entries.length;
+	let completed = 0;
+	let hasErrorOccurred = false;
+
+	await vscode.window.withProgress({
+		location: vscode.ProgressLocation.Notification,
+		title: "Clang Time Tracer: Batch Compilation",
+		cancellable: true
+	}, async (progress, token) => {
+
+		const limit = require('os').cpus().length;
+		const queue = [...entries];
+		let isCancelled = false;
+
+		token.onCancellationRequested(() => {
+			isCancelled = true;
+			outputChannel.appendLine("\n[Batch] Cancellation requested by user.");
+		});
+
+		const runNext = async (): Promise<void> => {
+			if (queue.length === 0 || isCancelled || hasErrorOccurred) { return; }
+
+			const entry = queue.shift()!;
+			const isClangCl = (entry.command || entry.arguments?.[0] || "").includes('clang-cl');
+			const extraArg = isClangCl ? "/clang:-ftime-trace" : "-ftime-trace";
+			const { exe, args } = prepareArguments(entry, extraArg);
+
+			return new Promise((resolve) => {
+				const cp = spawn(exe, args, { cwd: entry.directory });
+
+				let stderrBuffer: string[] = [];
+
+				//cp.stdout?.on('data', d => outputChannel.append(d.toString()));
+				cp.stderr?.on('data', d => {
+					stderrBuffer.push(d.toString());
+				});
+
+				cp.on('close', (code) => {
+					completed++;
+					const percent = Math.round((completed / total) * 100);
+					const status = code === 0 ? "" : " [ERROR]";
+					const fileName = path.basename(entry.file);
+
+					outputChannel.appendLine(`[${completed}/${total}] ${fileName}${status}`);
+					if (code !== 0) {
+						hasErrorOccurred = true;
+						outputChannel.append(stderrBuffer.join(''));
+						resolve();
+					}
+					else {
+						progress.report({
+							increment: (1 / total) * 100,
+							message: `${percent}% - ${fileName}`
+						});
+						resolve(runNext());
+					}
+				});
+
+				token.onCancellationRequested(() => {
+					cp.kill();
+					resolve();
+				});
+			});
+		};
+
+		const workers = Array(Math.min(limit, queue.length)).fill(null).map(() => runNext());
+		await Promise.all(workers);
+
+		if (isCancelled) {
+			vscode.window.showWarningMessage("Batch compilation cancelled by user.");
+			outputChannel.appendLine("Compilation cancelled by user.");
+		} else if (hasErrorOccurred) {
+			vscode.window.showErrorMessage("Batch compilation stopped due to error. Check output channel.");
+			outputChannel.appendLine("Compilation stopped due to error.");
+		} else {
+			vscode.window.showInformationMessage(`Successfully analyzed ${total} files.`);
+			outputChannel.appendLine("Successfull");
+		}
+	});
+}
+
 // --- Main Classes ---
 
 export class CompilationDatabase implements vscode.Disposable {
@@ -161,6 +343,19 @@ export class CompilationDatabase implements vscode.Disposable {
 		return this.commands.get(uri.toString());
 	}
 
+	public getAllEntriesInFolder(folderUri: vscode.Uri): CompileEntry[] {
+		const folderPath = folderUri.fsPath.toLowerCase();
+		const entries: CompileEntry[] = [];
+
+		for (const [uriStr, entry] of this.commands.entries()) {
+			const fileFsPath = vscode.Uri.parse(uriStr).fsPath.toLowerCase();
+			if (fileFsPath.startsWith(folderPath)) {
+				entries.push(entry);
+			}
+		}
+		return entries;
+	}
+
 	public dispose() {
 		this.watcher?.dispose();
 		this.disposables.forEach(d => d.dispose());
@@ -184,36 +379,42 @@ export function activate(context: vscode.ExtensionContext) {
 			return;
 		}
 
-		const isClangCl = (entry.command || entry.arguments?.[0] || "").includes('clang-cl');
-		const extraArg = isClangCl ? "/clang:-ftime-trace" : "-ftime-trace";
+		const [code, tracePath] = await buildEntry(entry, outputChannel);
 
-		const { exe, args } = prepareArguments(entry, extraArg);
-
-		outputChannel.clear();
-		outputChannel.appendLine(`[CWD] ${entry.directory}`);
-		outputChannel.appendLine(`[Exec] ${exe} ${args.join(' ')}`);
-		outputChannel.show(true);
-
-		const cp = spawn(exe, args, { cwd: entry.directory });
-
-		cp.stdout?.on('data', d => outputChannel.append(d.toString()));
-		cp.stderr?.on('data', d => outputChannel.append(d.toString()));
-
-		cp.on('close', (code) => {
-			if (code === 0) {
-				const tracePath = getTraceFilePath(entry, args);
-				if (fs.existsSync(tracePath)) {
-					TraceVisualizerPanel.createOrShow(context.extensionUri, tracePath);
-				} else {
-					outputChannel.appendLine(`[Error] Trace file not found at: ${tracePath}`);
-				}
+		if (code === 0) {
+			if (fs.existsSync(tracePath)) {
+				TraceVisualizerPanel.createOrShow(context.extensionUri, tracePath);
 			} else {
-				vscode.window.showErrorMessage(`Compilation failed with exit code ${code}`);
+				outputChannel.appendLine(`[Error] Trace file not found at: ${tracePath}`);
 			}
-		});
+		}
 	});
 
 	context.subscriptions.push(buildCmd);
+
+	const buildFolderCmd = vscode.commands.registerCommand('clang_time_tracer.build_folder', async (uri?: vscode.Uri) => {
+		let targetUri = uri;
+
+		if (!targetUri) {
+			targetUri = await pickFolderIntegrated();
+		}
+
+		if (!targetUri) { return; }
+
+		const entries = db.getAllEntriesInFolder(targetUri);
+
+		if (entries.length === 0) {
+			vscode.window.showWarningMessage("No files found in the compilation database for this folder.");
+			return;
+		}
+
+		outputChannel.clear();
+		outputChannel.show(true);
+
+		await buildMultipleEntries(entries, outputChannel);
+	});
+
+	context.subscriptions.push(buildFolderCmd);
 }
 
 // --- Webview Panel ---
