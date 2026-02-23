@@ -38,11 +38,6 @@ Since this extension executes the compiler command directly from `compile_comman
 
 ![Clang Time Tracer Demo](doc/ClangTimeTracerDemo.png)
 
-## Release Notes
-
-### 1.0.0
-* Initial release.
-
 ---
 
 **Enjoy faster builds!**
