@@ -2,7 +2,8 @@
   "name": "clang-time-tracer",
   "displayName": "Clang Time Tracer",
   "description": "",
-  "version": "1.0.2",
+  "icon": "doc/icon.png",
+  "version": "1.0.3",
   "engines": {
     "vscode": "^1.108.1"
   },
