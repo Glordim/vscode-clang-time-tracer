@@ -103,11 +103,24 @@ export class CompilationDatabase implements vscode.Disposable {
 		}
 	}
 
+	private getFullDatabasePath(folder: vscode.WorkspaceFolder): string {
+		const config = vscode.workspace.getConfiguration('clangTimeTracer');
+		const configPath = config.get<string>('compileCommands.path') || "";
+
+		let resolvedPath = path.isAbsolute(configPath)
+			? configPath
+			: path.join(folder.uri.fsPath, configPath);
+
+		if (!resolvedPath.toLowerCase().endsWith('.json')) {
+			resolvedPath = path.join(resolvedPath, 'compile_commands.json');
+		}
+
+		return resolvedPath;
+	}
+
 	private initWatcher(folder: vscode.WorkspaceFolder) {
 		this.watcher?.dispose();
-		const config = vscode.workspace.getConfiguration('clangTimeTracer');
-		const relPath = config.get<string>('compileCommands.path') || "";
-		const dbPath = path.join(folder.uri.fsPath, relPath, 'compile_commands.json');
+		const dbPath = this.getFullDatabasePath(folder);
 
 		this.watcher = vscode.workspace.createFileSystemWatcher(dbPath);
 		this.disposables.push(this.watcher);
@@ -119,14 +132,16 @@ export class CompilationDatabase implements vscode.Disposable {
 	}
 
 	private async loadDatabase(folder: vscode.WorkspaceFolder) {
-		const config = vscode.workspace.getConfiguration('clangTimeTracer');
-		const relPath = config.get<string>('compileCommands.path') || "";
-		const dbUri = vscode.Uri.joinPath(folder.uri, relPath, 'compile_commands.json');
+		const dbPath = this.getFullDatabasePath(folder);
 
-		if (!fs.existsSync(dbUri.fsPath)) { return; }
+		if (!fs.existsSync(dbPath)) {
+			this.outputChannel.appendLine(`[Error] file not found: ${dbPath}`);
+			vscode.window.showWarningMessage(`Clang Time Tracer: compile_commands.json not found at ${dbPath}`);
+			return;
+		}
 
 		try {
-			const content = await fs.promises.readFile(dbUri.fsPath, 'utf8');
+			const content = await fs.promises.readFile(dbPath, 'utf8');
 			const data: CompileEntry[] = JSON.parse(content);
 			this.commands.clear();
 
@@ -137,6 +152,7 @@ export class CompilationDatabase implements vscode.Disposable {
 			this.outputChannel.appendLine(`[DB] Loaded ${this.commands.size} entries.`);
 		} catch (err) {
 			this.outputChannel.appendLine(`[Error] Failed to load compilation database: ${err}`);
+			vscode.window.showErrorMessage(`Clang Time Tracer: Failed to read compile_commands.json. Check Output channel.`);
 		}
 	}
 
