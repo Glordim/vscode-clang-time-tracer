@@ -3,7 +3,7 @@
 	"displayName": "Clang Time Tracer",
 	"description": "",
 	"icon": "doc/icon.png",
-	"version": "1.0.4",
+	"version": "1.1.0",
 	"engines": {
 		"vscode": "^1.108.1"
 	},
@@ -21,20 +21,20 @@
 	"contributes": {
 		"commands": [
 			{
-				"command": "clang_time_tracer.build_and_analyze",
-				"title": "Clang Time Tracer: Build and analyze",
-				"category": "Clang"
+				"command": "clang_time_tracer.trace_file",
+				"title": "Trace file",
+				"category": "Clang Time Tracer"
 			},
 			{
-				"command": "clang_time_tracer.build_folder",
-				"title": "Clang Time Trace: Build All Files in Folder",
-				"category": "Clang"
+				"command": "clang_time_tracer.trace_folder",
+				"title": "Trace folder",
+				"category": "Clang Time Tracer"
 			}
 		],
 		"menus": {
 			"explorer/context": [
 				{
-					"command": "clang_time_tracer.build_folder",
+					"command": "clang_time_tracer.trace_folder",
 					"when": "explorerResourceIsFolder",
 					"group": "7_modification"
 				}

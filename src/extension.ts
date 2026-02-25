@@ -533,7 +533,7 @@ export function activate(context: vscode.ExtensionContext) {
 	const db = new CompilationDatabase(outputChannel);
 	context.subscriptions.push(outputChannel, db);
 
-	const buildCmd = vscode.commands.registerCommand('clang_time_tracer.build_and_analyze', async () => {
+	const traceFile = vscode.commands.registerCommand('clang_time_tracer.trace_file', async () => {
 		const editor = vscode.window.activeTextEditor;
 		if (!editor) { return; }
 
@@ -554,9 +554,9 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	});
 
-	context.subscriptions.push(buildCmd);
+	context.subscriptions.push(traceFile);
 
-	const buildFolderCmd = vscode.commands.registerCommand('clang_time_tracer.build_folder', async (uri?: vscode.Uri) => {
+	const traceFolderCmd = vscode.commands.registerCommand('clang_time_tracer.trace_folder', async (uri?: vscode.Uri) => {
 		let targetUri = uri;
 
 		if (!targetUri) {
@@ -586,7 +586,7 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	});
 
-	context.subscriptions.push(buildFolderCmd);
+	context.subscriptions.push(traceFolderCmd);
 }
 
 // --- Webview Panel ---
