@@ -144,7 +144,7 @@ async function pickFolderIntegrated(): Promise<vscode.Uri | undefined> {
 	}
 }
 
-async function buildEntry(entry: CompileEntry, outputChannel: vscode.OutputChannel): Promise<[number, string]> {
+async function buildEntry(entry: CompileEntry, outputChannel: vscode.OutputChannel): Promise<[boolean, string]> {
 	const isClangCl = (entry.command || entry.arguments?.[0] || "").includes('clang-cl');
 	const extraArg = isClangCl ? "/clang:-ftime-trace" : "-ftime-trace";
 
@@ -157,7 +157,7 @@ async function buildEntry(entry: CompileEntry, outputChannel: vscode.OutputChann
 	outputChannel.appendLine(`[CWD] ${entry.directory}`);
 	outputChannel.appendLine(`[Exec] ${exe} ${args.join(' ')}`);
 
-	return new Promise<[number, string]>((resolve) => {
+	return new Promise<[boolean, string]>((resolve) => {
 		const cp = spawn(exe, args, { cwd: entry.directory });
 
 		cp.stdout?.on('data', d => outputChannel.append(d.toString()));
@@ -166,24 +166,25 @@ async function buildEntry(entry: CompileEntry, outputChannel: vscode.OutputChann
 		cp.on('close', (code) => {
 			const exitCode = code ?? -1;
 
-			if (code !== 0) {
-				vscode.window.showErrorMessage(`Compilation failed with exit code ${code}`);
+			if (exitCode !== 0) {
+				vscode.window.showErrorMessage(`Compilation failed with exit code ${exitCode}`);
 			}
 
-			resolve([exitCode, tracePath]);
+			resolve([exitCode === 0, tracePath]);
 		});
 
 		cp.on('error', (err) => {
 			outputChannel.appendLine(`[System Error] ${err.message}`);
-			resolve([-1, tracePath]);
+			resolve([false, tracePath]);
 		});
 	});
 }
 
-async function buildMultipleEntries(entries: CompileEntry[], outputChannel: vscode.OutputChannel) {
+async function buildMultipleEntries(entries: CompileEntry[], outputChannel: vscode.OutputChannel): Promise<[boolean, string[]]> {
 	const total = entries.length;
 	let completed = 0;
 	let hasErrorOccurred = false;
+	const generatedTracePaths: string[] = [];
 
 	await vscode.window.withProgress({
 		location: vscode.ProgressLocation.Notification,
@@ -207,6 +208,7 @@ async function buildMultipleEntries(entries: CompileEntry[], outputChannel: vsco
 			const isClangCl = (entry.command || entry.arguments?.[0] || "").includes('clang-cl');
 			const extraArg = isClangCl ? "/clang:-ftime-trace" : "-ftime-trace";
 			const { exe, args } = prepareArguments(entry, extraArg);
+			const tracePath = getTraceFilePath(entry, args);
 
 			return new Promise((resolve) => {
 				const cp = spawn(exe, args, { cwd: entry.directory });
@@ -235,6 +237,7 @@ async function buildMultipleEntries(entries: CompileEntry[], outputChannel: vsco
 							increment: (1 / total) * 100,
 							message: `${percent}% - ${fileName}`
 						});
+						generatedTracePaths.push(tracePath);
 						resolve(runNext());
 					}
 				});
@@ -260,6 +263,167 @@ async function buildMultipleEntries(entries: CompileEntry[], outputChannel: vsco
 			outputChannel.appendLine("Successfull");
 		}
 	});
+
+	return [hasErrorOccurred === false, generatedTracePaths];
+}
+
+interface FileStats {
+	Path: string;
+	TotalTime: number;
+	SourceTime: number;
+	CodeGenTime: number;
+	OptimTime: number;
+}
+
+interface IncludeStats {
+	Path: string;
+	Time: number;
+	Count: number;
+}
+
+interface CodeGenStats {
+	Symbol: string;
+	Time: number;
+	Count: number;
+}
+
+interface CumulatedIncludeStats {
+	Path: string;
+	TotalTime: number;
+	Count: number;
+}
+
+interface TraceResult {
+	files: FileStats[];
+	includes: IncludeStats[];
+	codeGen: CodeGenStats[];
+	cumulatedIncludes: CumulatedIncludeStats[];
+}
+
+async function collectAndMergeTrace(tracePaths: string[]): Promise<TraceResult> {
+	const finalResult: TraceResult = {
+		files: [],
+		includes: [],
+		codeGen: [],
+		cumulatedIncludes: []
+	};
+
+	await vscode.window.withProgress({
+		location: vscode.ProgressLocation.Notification,
+		title: "Merging Traces",
+		cancellable: true
+	}, async (progress, token) => {
+
+		for (let i = 0; i < tracePaths.length; i++) {
+			if (token.isCancellationRequested) { break; }
+
+			const filePath = tracePaths[i];
+
+			if (await processClangTrace(filePath, finalResult) === false) {
+				break;
+			}
+
+			progress.report({
+				increment: (1 / tracePaths.length) * 100,
+				message: `Analyse de ${path.basename(filePath)}`
+			});
+		}
+	});
+
+	finalResult.files.sort((a, b) => b.TotalTime - a.TotalTime);
+	finalResult.includes.sort((a, b) => b.Time - a.Time);
+	finalResult.codeGen.sort((a, b) => b.Time - a.Time);
+	finalResult.cumulatedIncludes.sort((a, b) => b.TotalTime - a.TotalTime);
+
+	return finalResult;
+}
+
+function processClangTrace(filePath: string, traceResult: TraceResult): boolean {
+	const rawData = fs.readFileSync(filePath, 'utf-8');
+	const json = JSON.parse(rawData);
+	const events = json.traceEvents;
+
+	let fileStat: FileStats = {
+		Path: filePath,
+		TotalTime: 0,
+		SourceTime: 0,
+		CodeGenTime: 0,
+		OptimTime: 0
+	};
+
+	const sourceEventStack: any[] = [];
+	let firstSourceEventTs: number = Infinity;
+	let lastSourceEventTs: number = 0;
+
+	for (const event of events) {
+		const name = event.name;
+		const dur = event.dur || 0;
+		const detail = event.args?.detail;
+
+		if (event.cat === "Source" && event.ph === "b") {
+			sourceEventStack.push(event);
+			firstSourceEventTs = Math.min(firstSourceEventTs, event.ts);
+			continue;
+		}
+
+		if (event.cat === "Source" && event.ph === "e") {
+			const startEvent = sourceEventStack.pop();
+			if (!startEvent) { continue; }
+
+			lastSourceEventTs = Math.max(lastSourceEventTs, event.ts);
+
+			const dur = event.ts - startEvent.ts;
+			const detail = startEvent.args?.detail;
+
+			let existingInc = traceResult.includes.find(i => i.Path === detail);
+			if (existingInc) {
+				existingInc.Time = Math.max(existingInc.Time, dur);
+				existingInc.Count += 1;
+			} else {
+				traceResult.includes.push({
+					Path: detail,
+					Time: dur,
+					Count: 1
+				});
+			}
+
+			let existingCumul = traceResult.cumulatedIncludes.find(c => c.Path === detail);
+			if (existingCumul) {
+				existingCumul.TotalTime += dur;
+				existingCumul.Count += 1;
+			} else {
+				traceResult.cumulatedIncludes.push({
+					Path: detail,
+					TotalTime: dur,
+					Count: 1
+				});
+			}
+			continue;
+		}
+
+		if (name === "Total ExecuteCompiler") {
+			fileStat.TotalTime = dur;
+		}
+		/* Bugged ?
+		else if (name === "Total Source") {
+			fileStat.SourceTime = dur;
+		}
+		*/
+		else if (name === "Total InstantiateFunction") {
+			fileStat.CodeGenTime = dur;
+		}
+		else if (name === "Total OptModule") {
+			fileStat.OptimTime = dur;
+		}
+	}
+
+	if (lastSourceEventTs !== Infinity) {
+		fileStat.SourceTime = lastSourceEventTs - firstSourceEventTs;
+	}
+
+	traceResult.files.push(fileStat);
+
+	return true;
 }
 
 // --- Main Classes ---
@@ -379,9 +543,9 @@ export function activate(context: vscode.ExtensionContext) {
 			return;
 		}
 
-		const [code, tracePath] = await buildEntry(entry, outputChannel);
+		const [result, tracePath] = await buildEntry(entry, outputChannel);
 
-		if (code === 0) {
+		if (result) {
 			if (fs.existsSync(tracePath)) {
 				TraceVisualizerPanel.createOrShow(context.extensionUri, tracePath);
 			} else {
@@ -411,7 +575,15 @@ export function activate(context: vscode.ExtensionContext) {
 		outputChannel.clear();
 		outputChannel.show(true);
 
-		await buildMultipleEntries(entries, outputChannel);
+		const [result, tracePaths] = await buildMultipleEntries(entries, outputChannel);
+		if (result) {
+			const traceResult = await collectAndMergeTrace(tracePaths);
+			FolderAnalysisPanel.createOrShow(
+				context.extensionUri,
+				traceResult,
+				path.basename(targetUri.fsPath)
+			);
+		}
 	});
 
 	context.subscriptions.push(buildFolderCmd);
@@ -524,6 +696,59 @@ export class TraceVisualizerPanel {
 
 	public dispose() {
 		TraceVisualizerPanel._openPanels.delete(this);
+		this._panel.dispose();
+		while (this._disposables.length) {
+			const x = this._disposables.pop();
+			if (x) { x.dispose(); }
+		}
+	}
+}
+
+export class FolderAnalysisPanel {
+	private static _openPanels: Set<FolderAnalysisPanel> = new Set();
+	private readonly _disposables: vscode.Disposable[] = [];
+
+	public static createOrShow(extensionUri: vscode.Uri, data: any, folderName: string) {
+		const title = `Folder Analysis: ${folderName}`;
+
+		const panel = vscode.window.createWebviewPanel(
+			'ClangFolderAnalysis',
+			title,
+			vscode.ViewColumn.Two,
+			{
+				enableScripts: true,
+				retainContextWhenHidden: true,
+				localResourceRoots: [
+					vscode.Uri.joinPath(extensionUri, 'media'),
+					vscode.Uri.joinPath(extensionUri, 'dist')
+				]
+			}
+		);
+
+		const newPanel = new FolderAnalysisPanel(panel, extensionUri, data);
+		this._openPanels.add(newPanel);
+	}
+
+	private constructor(private readonly _panel: vscode.WebviewPanel, extensionUri: vscode.Uri, data: any) {
+		this._panel.webview.html = this._getHtmlForWebview(this._panel.webview, extensionUri, data);
+
+		this._panel.webview.onDidReceiveMessage(message => {
+		});
+	}
+
+	private _getHtmlForWebview(webview: vscode.Webview, extensionUri: vscode.Uri, data: any) {
+		const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'dist', 'folder_view.js'));
+		const htmlPath = vscode.Uri.joinPath(extensionUri, 'media', 'folder_view.html');
+
+		const sanitizedData = JSON.stringify(data).replace(/</g, '\\u003c');
+
+		return fs.readFileSync(htmlPath.fsPath, 'utf8')
+			.replace('{{scriptUri}}', scriptUri.toString())
+			.replace('{{traceData}}', sanitizedData);
+	}
+
+	public dispose() {
+		FolderAnalysisPanel._openPanels.delete(this);
 		this._panel.dispose();
 		while (this._disposables.length) {
 			const x = this._disposables.pop();

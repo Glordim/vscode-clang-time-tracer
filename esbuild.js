@@ -46,18 +46,31 @@ async function main() {
 		outfile: 'dist/canvas.js',
 	});
 
+	const webviewCtx2 = await esbuild.context({
+		entryPoints: ['src/folder_view.ts'],
+		bundle: true,
+		format: 'iife',
+		minify: production,
+		sourcemap: !production,
+		platform: 'browser',
+		outfile: 'dist/folder_view.js',
+	});
+
 	if (watch) {
 		await Promise.all([
 			extensionCtx.watch(),
-			webviewCtx.watch()
+			webviewCtx.watch(),
+			webviewCtx2.watch()
 		]);
 	} else {
 		await Promise.all([
 			extensionCtx.rebuild(),
-			webviewCtx.rebuild()
+			webviewCtx.rebuild(),
+			webviewCtx2.rebuild()
 		]);
 		await extensionCtx.dispose();
 		await webviewCtx.dispose();
+		await webviewCtx2.dispose();
 	}
 }
 
