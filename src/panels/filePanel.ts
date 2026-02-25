@@ -34,7 +34,7 @@ export class TraceVisualizerPanel extends BasePanel {
 	private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, traceData: any) {
 		super(panel, extensionUri);
 
-		this._panel.webview.html = this._getHtmlContent('view.html', 'canvas.js', traceData);
+		this._panel.webview.html = this._getHtmlContent('file_view.html', 'file_view.js', traceData);
 
 		this._panel.webview.onDidReceiveMessage(message => {
 			switch (message.command) {

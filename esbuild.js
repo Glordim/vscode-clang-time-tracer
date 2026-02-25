@@ -37,17 +37,17 @@ async function main() {
 	});
 
 	const webviewCtx = await esbuild.context({
-		entryPoints: ['src/canvas.ts'],
+		entryPoints: ['src/webviews/file_view.ts'],
 		bundle: true,
 		format: 'iife',
 		minify: production,
 		sourcemap: !production,
 		platform: 'browser',
-		outfile: 'dist/canvas.js',
+		outfile: 'dist/file_view.js',
 	});
 
 	const webviewCtx2 = await esbuild.context({
-		entryPoints: ['src/folder_view.ts'],
+		entryPoints: ['src/webviews/folder_view.ts'],
 		bundle: true,
 		format: 'iife',
 		minify: production,
