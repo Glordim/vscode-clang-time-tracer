@@ -22,6 +22,7 @@ export abstract class BasePanel {
 		const sanitizedData = JSON.stringify(data).replace(/</g, '\\u003c');
 
 		return fs.readFileSync(htmlPath.fsPath, 'utf8')
+			.replace(/{{cspSource}}/g, webview.cspSource)
 			.replace('{{scriptUri}}', scriptUri.toString())
 			.replace('{{traceData}}', sanitizedData);
 	}
