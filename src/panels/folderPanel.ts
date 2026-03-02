@@ -24,10 +24,17 @@ export class FolderAnalysisPanel extends BasePanel {
 	private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, data: any) {
 		super(panel, extensionUri);
 
-		this._panel.webview.html = this._getHtmlContent('folder_view.html', 'folder_view.js', data);
+		this._panel.webview.html = this._getHtmlContent('folder_view.html', 'folder_view.js');
 
 		this._panel.webview.onDidReceiveMessage(message => {
-
+			switch (message.command) {
+				case 'webviewReady':
+					this._panel.webview.postMessage({
+						command: 'initData',
+						payload: data
+					});
+					return;
+			}
 		}, null, this._disposables);
 	}
 }

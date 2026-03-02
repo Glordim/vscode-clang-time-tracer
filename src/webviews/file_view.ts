@@ -339,6 +339,19 @@ function drawEvent(ev: ProcessedEvent, rowOffsetY: number) {
 }
 
 function render(): void {
+
+    const canvas = document.getElementById('mainCanvas') as HTMLCanvasElement;
+    const overlay = document.getElementById('loadingOverlay') as HTMLElement;
+
+    if (threads.length === 0) {
+        canvas.style.display = 'none';
+        overlay.style.display = 'block';
+        return;
+    }
+
+    canvas.style.display = 'block';
+    overlay.style.display = 'none';
+
     canvas.width = getClientWidth();
     canvas.height = window.innerHeight;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -554,16 +567,19 @@ window.addEventListener('resize', () => {
     render();
 });
 
+const resizeObserver = new ResizeObserver(() => {
+    requestAnimationFrame(render);
+});
+resizeObserver.observe(canvas);
+
 window.addEventListener('message', event => {
     const message = event.data;
-    if (message.command === 'update' && message.data) {
-        preprocess(message.data);
-        resetView();
+
+    switch (message.command) {
+        case 'initData':
+            preprocess(message.payload);
+            render();
+            break;
     }
 });
-
-const globalData = (window as any).initialData;
-if (globalData) {
-    preprocess(globalData);
-    resetView();
-}
+vscode.postMessage({ command: 'webviewReady' });

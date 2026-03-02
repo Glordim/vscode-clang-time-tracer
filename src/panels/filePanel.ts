@@ -34,7 +34,7 @@ export class TraceVisualizerPanel extends BasePanel {
 	private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, traceData: any) {
 		super(panel, extensionUri);
 
-		this._panel.webview.html = this._getHtmlContent('file_view.html', 'file_view.js', traceData);
+		this._panel.webview.html = this._getHtmlContent('file_view.html', 'file_view.js');
 
 		this._panel.webview.onDidReceiveMessage(message => {
 			switch (message.command) {
@@ -43,6 +43,12 @@ export class TraceVisualizerPanel extends BasePanel {
 					return;
 				case 'copyPath':
 					this._handleCopyPath(message.path);
+					return;
+				case 'webviewReady':
+					this._panel.webview.postMessage({
+						command: 'initData',
+						payload: traceData
+					});
 					return;
 			}
 		}, null, this._disposables);

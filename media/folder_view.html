@@ -2,7 +2,8 @@
 <html>
 
 <head>
-	<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src {{cspSource}} 'unsafe-inline'; style-src {{cspSource}} 'unsafe-inline'; connect-src {{cspSource}};"/>
+	<meta http-equiv="Content-Security-Policy"
+		content="default-src 'none'; script-src {{cspSource}} 'unsafe-inline'; style-src {{cspSource}} 'unsafe-inline'; connect-src {{cspSource}};" />
 	<style>
 		:root {
 			--tab-height: 35px;
@@ -56,6 +57,31 @@
 			display: block;
 			margin: 0 auto;
 		}
+
+		#loadingOverlay {
+			color: var(--vscode-descriptionForeground);
+			font-size: 1.2em;
+		}
+
+		.spinner {
+			border: 3px solid var(--vscode-panel-border);
+			border-top: 3px solid var(--vscode-button-background);
+			border-radius: 50%;
+			width: 20px;
+			height: 20px;
+			animation: spin 1s linear infinite;
+			margin: 0 auto 10px;
+		}
+
+		@keyframes spin {
+			0% {
+				transform: rotate(0deg);
+			}
+
+			100% {
+				transform: rotate(360deg);
+			}
+		}
 	</style>
 </head>
 
@@ -66,13 +92,15 @@
 		<button class="tab-btn" data-target="IncludesCumulatedTime">Includes (Cumulated time)</button>
 	</nav>
 	<div id="canvasContainer" style="overflow-y: auto; height: 100vh; position: relative;">
+		<div id="loadingOverlay"
+			style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center;">
+			<div class="spinner"></div>
+			<p>Loading trace data...</p>
+		</div>
 		<div id="virtualHeight" style="position: absolute; top: 0; left: 0; width: 1px;"></div>
 		<canvas id="mainCanvas" style="position: sticky; top: 0; left: 0; display: block;"></canvas>
 	</div>
 
-	<script>
-		window.traceData = {{traceData}};
-	</script>
 	<script src="{{scriptUri}}"></script>
 </body>
 

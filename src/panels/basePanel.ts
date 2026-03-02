@@ -13,18 +13,15 @@ export abstract class BasePanel {
 		this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
 	}
 
-	protected _getHtmlContent(htmlFileName: string, scriptFileName: string, data: any): string {
+	protected _getHtmlContent(htmlFileName: string, scriptFileName: string): string {
 		const webview = this._panel.webview;
 
 		const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'dist', scriptFileName));
 		const htmlPath = vscode.Uri.joinPath(this._extensionUri, 'media', htmlFileName);
 
-		const sanitizedData = JSON.stringify(data).replace(/</g, '\\u003c');
-
 		return fs.readFileSync(htmlPath.fsPath, 'utf8')
 			.replace(/{{cspSource}}/g, webview.cspSource)
-			.replace('{{scriptUri}}', scriptUri.toString())
-			.replace('{{traceData}}', sanitizedData);
+			.replace('{{scriptUri}}', scriptUri.toString());
 	}
 
 	public dispose() {

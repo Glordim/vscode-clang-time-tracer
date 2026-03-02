@@ -31,13 +31,12 @@ interface TraceResult {
 	cumulatedIncludes: CumulatedIncludeStats[];
 }
 
-const data = (window as any).traceData as TraceResult;
+let data: TraceResult;
 let currentView: 'Files' | 'Includes' | 'IncludesCumulatedTime' = 'Files';
 
 function initTabs(): void {
 	const container = document.getElementById('canvasContainer')!;
 	const tabs = document.querySelectorAll<HTMLButtonElement>('.tab-btn');
-	const panes = document.querySelectorAll<HTMLDivElement>('.tab-pane');
 
 	tabs.forEach(btn => {
 		btn.addEventListener('click', () => {
@@ -63,8 +62,20 @@ function initTabs(): void {
 }
 
 function render(): void {
-	const container = document.getElementById('canvasContainer')!;
+
 	const canvas = document.getElementById('mainCanvas') as HTMLCanvasElement;
+	const overlay = document.getElementById('loadingOverlay') as HTMLElement;
+
+	if (!data) {
+		canvas.style.display = 'none';
+		overlay.style.display = 'block';
+		return;
+	}
+
+	canvas.style.display = 'block';
+	overlay.style.display = 'none';
+
+	const container = document.getElementById('canvasContainer')!;
 	const virtualHeight = document.getElementById('virtualHeight')!;
 	const ctx = canvas.getContext('2d')!;
 
@@ -184,4 +195,17 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, width: n
 	if (stroke) { ctx.stroke(); }
 }
 
-window.addEventListener('DOMContentLoaded', initTabs);
+initTabs();
+
+const vscode = typeof (window as any).acquireVsCodeApi === 'function' ? (window as any).acquireVsCodeApi() : null;
+window.addEventListener('message', event => {
+	const message = event.data;
+
+	switch (message.command) {
+		case 'initData':
+			data = message.payload;
+			render();
+			break;
+	}
+});
+vscode.postMessage({ command: 'webviewReady' });
