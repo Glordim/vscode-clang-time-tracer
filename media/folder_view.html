@@ -65,7 +65,10 @@
 		<button class="tab-btn" data-target="Includes">Includes</button>
 		<button class="tab-btn" data-target="IncludesCumulatedTime">Includes (Cumulated time)</button>
 	</nav>
-	<canvas id="mainCanvas"></canvas>
+	<div id="canvasContainer" style="overflow-y: auto; height: 100vh; position: relative;">
+		<div id="virtualHeight" style="position: absolute; top: 0; left: 0; width: 1px;"></div>
+		<canvas id="mainCanvas" style="position: sticky; top: 0; left: 0; display: block;"></canvas>
+	</div>
 
 	<script>
 		window.traceData = {{traceData}};
