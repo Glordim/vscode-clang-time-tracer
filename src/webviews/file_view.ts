@@ -94,11 +94,15 @@ function getClientWidth(): number {
 	return document.documentElement.clientWidth || window.innerWidth;
 }
 
+function resizeCanvas(): void {
+	canvas.width = getClientWidth();
+	canvas.height = window.innerHeight;
+}
+
 function resetView(): void {
 	if (maxTraceTime <= 0) { return; }
 
-	canvas.width = getClientWidth();
-	canvas.height = window.innerHeight;
+	resizeCanvas();
 
 	const marginY = CONFIG.TIMELINE.HEIGHT + 20;
 
@@ -350,8 +354,6 @@ function render(): void {
 	canvas.style.display = 'block';
 	overlay.style.display = 'none';
 
-	canvas.width = getClientWidth();
-	canvas.height = window.innerHeight;
 	ctx.clearRect(0, 0, canvas.width, canvas.height);
 
 	let currentY = view.y;
@@ -559,16 +561,10 @@ document.getElementById('menu-copy-path')?.addEventListener('click', () => {
 });
 
 window.addEventListener('resize', () => {
-	canvas.width = window.innerWidth;
-	canvas.height = window.innerHeight;
+	resizeCanvas();
 	clampView();
 	render();
 });
-
-const resizeObserver = new ResizeObserver(() => {
-	requestAnimationFrame(render);
-});
-resizeObserver.observe(canvas);
 
 window.addEventListener('message', event => {
 	const message = event.data;
@@ -576,7 +572,7 @@ window.addEventListener('message', event => {
 	switch (message.command) {
 		case 'initData':
 			preprocess(message.payload);
-			render();
+			resetView();
 			break;
 	}
 });
