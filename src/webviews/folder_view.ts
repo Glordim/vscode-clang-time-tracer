@@ -1,36 +1,29 @@
 interface FileStats {
-	TracePath: string;
-	SourcePath: string;
-	TotalTime: number;
-	SourceTime: number;
-	TemplateTime: number;
-	OptimTime: number;
+	tracePath: string;
+	sourcePath: string;
+	totalTime: number;
+	sourceTime: number;
+	templateTime: number;
+	optimTime: number;
 }
 
 interface IncludeStats {
-	Path: string;
-	MaxTime: number;
-	Count: number;
-	IncludedBy: string[];
-}
-
-interface CodeGenStats {
-	Symbol: string;
-	Time: number;
-	Count: number;
+	path: string;
+	maxTime: number;
+	count: number;
+	includedBy: string[];
 }
 
 interface CumulatedIncludeStats {
-	Path: string;
-	TotalTime: number;
-	Count: number;
-	IncludedBy: string[];
+	path: string;
+	totalTime: number;
+	count: number;
+	includedBy: string[];
 }
 
 interface TraceResult {
 	files: FileStats[];
 	includes: IncludeStats[];
-	codeGen: CodeGenStats[];
 	cumulatedIncludes: CumulatedIncludeStats[];
 }
 
@@ -65,8 +58,8 @@ const topOffset = 10;
 
 function getItemHeight(index: number): number {
 	const item = currentList[index];
-	if (expandedItems.has(index) && item.IncludedBy?.length) {
-		return itemFullHeight + item.IncludedBy.length * subItemHeight + 8;
+	if (expandedItems.has(index) && item.includedBy?.length) {
+		return itemFullHeight + item.includedBy.length * subItemHeight + 8;
 	}
 	return itemFullHeight;
 }
@@ -157,7 +150,7 @@ function render(): void {
 function drawList(): void {
 	if (!currentList.length) { return; }
 
-	const maxTime = Math.max(...currentList.map(f => f.TotalTime || f.MaxTime || 0));
+	const maxTime = Math.max(...currentList.map(f => f.totalTime || f.maxTime || 0));
 	const maxCanvasWidth = canvas.width - 40;
 	const scrollTop = container.scrollTop;
 
@@ -170,17 +163,17 @@ function drawList(): void {
 		if (screenTop > canvas.height) { break; }
 
 		const item = currentList[i];
-		const itemTime = item.TotalTime || item.MaxTime;
+		const itemTime = item.totalTime || item.maxTime;
 
-		const displayPath: string = item.SourcePath ?? item.Path;
+		const displayPath: string = item.sourcePath ?? item.path;
 		const fileName = displayPath.split(/[\\/]/).pop() || displayPath;
 
 		const boxWidth = Math.max((itemTime / maxTime) * (maxCanvasWidth - 100), 150);
-		const isExpandable = currentView !== 'Files' && item.IncludedBy?.length > 0;
+		const isExpandable = currentView !== 'Files' && item.includedBy?.length > 0;
 		const isExpanded = expandedItems.has(i);
 
-		const expandedListHeight = isExpanded && item.IncludedBy?.length
-			? item.IncludedBy.length * subItemHeight + 8
+		const expandedListHeight = isExpanded && item.includedBy?.length
+			? item.includedBy.length * subItemHeight + 8
 			: 0;
 		const totalBoxHeight = boxHeight + expandedListHeight;
 
@@ -195,7 +188,7 @@ function drawList(): void {
 		if (currentView === 'Files') {
 			const barY = screenTop + 24;
 			const barH = 12;
-			const pct = item.SourceTime / item.TotalTime;
+			const pct = item.sourceTime / item.totalTime;
 			const sourceW = pct * (boxWidth - 20);
 
 			ctx.fillStyle = '#4a9e5c';
@@ -208,7 +201,7 @@ function drawList(): void {
 			ctx.fillStyle = '#888888';
 			ctx.font = '10px sans-serif';
 			const arrow = isExpandable ? (isExpanded ? '▼ ' : '▶ ') : '';
-			ctx.fillText(`${arrow}${item.Count} inclusion${item.Count > 1 ? 's' : ''}`, 20, screenTop + 34);
+			ctx.fillText(`${arrow}${item.count} inclusion${item.count > 1 ? 's' : ''}`, 20, screenTop + 34);
 		}
 
 		ctx.fillStyle = '#888888';
@@ -216,12 +209,11 @@ function drawList(): void {
 		const timeStr = `${(itemTime / 1000).toFixed(1)} ms`;
 		ctx.fillText(timeStr, 10 + boxWidth + 10, screenTop + 25);
 
-		if (isExpanded && item.IncludedBy?.length) {
+		if (isExpanded && item.includedBy?.length) {
 			const listTop = screenTop + boxHeight;
 			ctx.font = '11px sans-serif';
-			item.IncludedBy.forEach((srcPath: string, j: number) => {
-				let srcName = srcPath.split(/[\\/]/).pop() || srcPath;
-				srcName = srcName.replace('.cpp.json', '.cpp').replace('.json', '');
+			item.includedBy.forEach((srcPath: string, j: number) => {
+				const srcName = srcPath.split(/[\\/]/).pop() || srcPath;
 				const rowY = listTop + j * subItemHeight;
 				ctx.fillStyle = j % 2 === 0 ? '#333333' : '#2d2d2d';
 				ctx.fillRect(11, rowY, boxWidth - 2, subItemHeight);
@@ -250,20 +242,20 @@ canvas.addEventListener('mousemove', (e) => {
 
 	if (index >= 0) {
 		const item = currentList[index];
-		const itemTime = item.TotalTime || item.MaxTime;
-		const maxTime = Math.max(...currentList.map((f: any) => f.TotalTime || f.MaxTime || 0));
+		const itemTime = item.totalTime || item.maxTime;
+		const maxTime = Math.max(...currentList.map((f: any) => f.totalTime || f.maxTime || 0));
 		const boxWidth = Math.max((itemTime / maxTime) * (canvas.width - 40 - 100), 150);
 
 		if (mouseX >= 10 && mouseX <= 10 + boxWidth) {
 			const itemTop = itemYPositions[index];
 			const subOffset = realY - itemTop - itemFullHeight;
-			if (expandedItems.has(index) && subOffset >= 0 && item.IncludedBy?.length) {
+			if (expandedItems.has(index) && subOffset >= 0 && item.includedBy?.length) {
 				const subIndex = Math.floor(subOffset / subItemHeight);
-				if (subIndex < item.IncludedBy.length) {
-					canvas.title = item.IncludedBy[subIndex];
+				if (subIndex < item.includedBy.length) {
+					canvas.title = item.includedBy[subIndex];
 				}
 			} else {
-				canvas.title = item.SourcePath ?? item.Path;
+				canvas.title = item.sourcePath ?? item.path;
 			}
 			canvas.style.cursor = 'pointer';
 			return;
@@ -287,8 +279,8 @@ canvas.addEventListener('click', (e) => {
 	}
 
 	const item = currentList[index];
-	const itemTime = item.TotalTime || item.MaxTime;
-	const maxTime = Math.max(...currentList.map((f: any) => f.TotalTime || f.MaxTime || 0));
+	const itemTime = item.totalTime || item.maxTime;
+	const maxTime = Math.max(...currentList.map((f: any) => f.totalTime || f.maxTime || 0));
 	const boxWidth = Math.max((itemTime / maxTime) * (canvas.width - 40 - 100), 150);
 
 	if (mouseX < 10 || mouseX > 10 + boxWidth) {
@@ -300,7 +292,7 @@ canvas.addEventListener('click', (e) => {
 	selectedIndex = index;
 
 	// Expand/collapse: only on the arrow glyph bounding box (drawn at x=20, y=itemTop+34, ~14px wide, 10px tall)
-	if (currentView !== 'Files' && item.IncludedBy?.length) {
+	if (currentView !== 'Files' && item.includedBy?.length) {
 		const relY = realY - itemYPositions[index];
 		if (relY >= 24 && relY <= 38 && mouseX >= 18 && mouseX <= 34) {
 			if (expandedItems.has(index)) {
@@ -326,14 +318,14 @@ canvas.addEventListener('dblclick', (e) => {
 	if (index < 0) { return; }
 
 	const item = currentList[index];
-	const itemTime = item.TotalTime || item.MaxTime;
-	const maxTime = Math.max(...currentList.map((f: any) => f.TotalTime || f.MaxTime || 0));
+	const itemTime = item.totalTime || item.maxTime;
+	const maxTime = Math.max(...currentList.map((f: any) => f.totalTime || f.maxTime || 0));
 	const boxWidth = Math.max((itemTime / maxTime) * (canvas.width - 40 - 100), 150);
 
 	if (mouseX >= 10 && mouseX <= 10 + boxWidth && vscode) {
 		selectedIndex = index;
 		requestAnimationFrame(drawList);
-		vscode.postMessage({ command: 'openTrace', path: item.TracePath });
+		vscode.postMessage({ command: 'openTrace', path: item.tracePath });
 	}
 });
 
@@ -352,13 +344,13 @@ canvas.addEventListener('contextmenu', (e) => {
 
 	if (index >= 0) {
 		const item = currentList[index];
-		const itemTime = item.TotalTime || item.MaxTime;
-		const maxTime = Math.max(...currentList.map((f: any) => f.TotalTime || f.MaxTime || 0));
+		const itemTime = item.totalTime || item.maxTime;
+		const maxTime = Math.max(...currentList.map((f: any) => f.totalTime || f.maxTime || 0));
 		const boxWidth = Math.max((itemTime / maxTime) * (canvas.width - 40 - 100), 150);
 
 		if (mouseX >= 10 && mouseX <= 10 + boxWidth) {
-			rightClickedPath = item.SourcePath;
-			rightClickedTracePath = item.TracePath;
+			rightClickedPath = item.sourcePath;
+			rightClickedTracePath = item.tracePath;
 			selectedIndex = index;
 			requestAnimationFrame(drawList);
 			contextMenu.style.display = 'block';

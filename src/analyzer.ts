@@ -3,38 +3,31 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 export interface FileStats {
-	TracePath: string;
-	SourcePath: string;
-	TotalTime: number;
-	SourceTime: number;
-	TemplateTime: number;
-	OptimTime: number;
+	tracePath: string;
+	sourcePath: string;
+	totalTime: number;
+	sourceTime: number;
+	templateTime: number;
+	optimTime: number;
 }
 
 export interface IncludeStats {
-	Path: string;
-	MaxTime: number;
-	Count: number;
-	IncludedBy: string[];
-}
-
-export interface CodeGenStats {
-	Symbol: string;
-	Time: number;
-	Count: number;
+	path: string;
+	maxTime: number;
+	count: number;
+	includedBy: string[];
 }
 
 export interface CumulatedIncludeStats {
-	Path: string;
-	TotalTime: number;
-	Count: number;
-	IncludedBy: string[];
+	path: string;
+	totalTime: number;
+	count: number;
+	includedBy: string[];
 }
 
 export interface TraceResult {
 	files: FileStats[];
 	includes: IncludeStats[];
-	codeGen: CodeGenStats[];
 	cumulatedIncludes: CumulatedIncludeStats[];
 }
 
@@ -42,7 +35,6 @@ export async function collectAndMergeTrace(tracePaths: { tracePath: string, sour
 	const finalResult: TraceResult = {
 		files: [],
 		includes: [],
-		codeGen: [],
 		cumulatedIncludes: []
 	};
 
@@ -68,12 +60,11 @@ export async function collectAndMergeTrace(tracePaths: { tracePath: string, sour
 		}
 	});
 
-	finalResult.files.sort((a, b) => b.TotalTime - a.TotalTime);
-	finalResult.includes.sort((a, b) => b.MaxTime - a.MaxTime);
-	finalResult.includes.forEach(i => i.IncludedBy.sort((a, b) => a.localeCompare(b)));
-	finalResult.codeGen.sort((a, b) => b.Time - a.Time);
-	finalResult.cumulatedIncludes.sort((a, b) => b.TotalTime - a.TotalTime);
-	finalResult.cumulatedIncludes.forEach(i => i.IncludedBy.sort((a, b) => a.localeCompare(b)));
+	finalResult.files.sort((a, b) => b.totalTime - a.totalTime);
+	finalResult.includes.sort((a, b) => b.maxTime - a.maxTime);
+	finalResult.includes.forEach(i => i.includedBy.sort((a, b) => a.localeCompare(b)));
+	finalResult.cumulatedIncludes.sort((a, b) => b.totalTime - a.totalTime);
+	finalResult.cumulatedIncludes.forEach(i => i.includedBy.sort((a, b) => a.localeCompare(b)));
 
 	return finalResult;
 }
@@ -84,12 +75,12 @@ function processClangTrace(filePath: string, sourcePath: string, traceResult: Tr
 	const events = json.traceEvents;
 
 	let fileStat: FileStats = {
-		TracePath: filePath,
-		SourcePath: sourcePath,
-		TotalTime: 0,
-		SourceTime: 0,
-		TemplateTime: 0,
-		OptimTime: 0
+		tracePath: filePath,
+		sourcePath: sourcePath,
+		totalTime: 0,
+		sourceTime: 0,
+		templateTime: 0,
+		optimTime: 0
 	};
 
 	const sourceEventStack: any[] = [];
@@ -99,7 +90,6 @@ function processClangTrace(filePath: string, sourcePath: string, traceResult: Tr
 	for (const event of events) {
 		const name = event.name;
 		const dur = event.dur || 0;
-		const detail = event.args?.detail;
 
 		if (event.cat === "Source" && event.ph === "b") {
 			sourceEventStack.push(event);
@@ -116,54 +106,54 @@ function processClangTrace(filePath: string, sourcePath: string, traceResult: Tr
 			const dur = event.ts - startEvent.ts;
 			const detail = startEvent.args?.detail;
 
-			let existingInc = traceResult.includes.find(i => i.Path === detail);
+			let existingInc = traceResult.includes.find(i => i.path === detail);
 			if (existingInc) {
-				existingInc.MaxTime = Math.max(existingInc.MaxTime, dur);
-				existingInc.Count += 1;
-				if (!existingInc.IncludedBy.includes(filePath)) { existingInc.IncludedBy.push(filePath); }
+				existingInc.maxTime = Math.max(existingInc.maxTime, dur);
+				existingInc.count += 1;
+				if (!existingInc.includedBy.includes(sourcePath)) { existingInc.includedBy.push(sourcePath); }
 			} else {
 				traceResult.includes.push({
-					Path: detail,
-					MaxTime: dur,
-					Count: 1,
-					IncludedBy: [filePath]
+					path: detail,
+					maxTime: dur,
+					count: 1,
+					includedBy: [sourcePath]
 				});
 			}
 
-			let existingCumul = traceResult.cumulatedIncludes.find(c => c.Path === detail);
+			let existingCumul = traceResult.cumulatedIncludes.find(c => c.path === detail);
 			if (existingCumul) {
-				existingCumul.TotalTime += dur;
-				existingCumul.Count += 1;
-				if (!existingCumul.IncludedBy.includes(filePath)) { existingCumul.IncludedBy.push(filePath); }
+				existingCumul.totalTime += dur;
+				existingCumul.count += 1;
+				if (!existingCumul.includedBy.includes(sourcePath)) { existingCumul.includedBy.push(sourcePath); }
 			} else {
 				traceResult.cumulatedIncludes.push({
-					Path: detail,
-					TotalTime: dur,
-					Count: 1,
-					IncludedBy: [filePath]
+					path: detail,
+					totalTime: dur,
+					count: 1,
+					includedBy: [sourcePath]
 				});
 			}
 			continue;
 		}
 
 		if (name === "Total ExecuteCompiler") {
-			fileStat.TotalTime = dur;
+			fileStat.totalTime = dur;
 		}
 		/* Bugged ?
 		else if (name === "Total Source") {
-			fileStat.SourceTime = dur;
+			fileStat.sourceTime = dur;
 		}
 		*/
 		else if (name === "Total InstantiateFunction") {
-			fileStat.TemplateTime = dur;
+			fileStat.templateTime = dur;
 		}
 		else if (name === "Total OptModule") {
-			fileStat.OptimTime = dur;
+			fileStat.optimTime = dur;
 		}
 	}
 
 	if (lastSourceEventTs !== 0) {
-		fileStat.SourceTime = lastSourceEventTs - firstSourceEventTs;
+		fileStat.sourceTime = lastSourceEventTs - firstSourceEventTs;
 	}
 
 	traceResult.files.push(fileStat);
