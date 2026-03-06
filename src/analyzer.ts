@@ -152,7 +152,7 @@ function processClangTrace(filePath: string, traceResult: TraceResult): boolean 
 		}
 	}
 
-	if (lastSourceEventTs !== Infinity) {
+	if (lastSourceEventTs !== 0) {
 		fileStat.SourceTime = lastSourceEventTs - firstSourceEventTs;
 	}
 
