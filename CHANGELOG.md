@@ -5,6 +5,7 @@ All notable changes to the "clang-time-tracer" extension will be documented in t
 ## [1.1.0]
 - Add trace_folder command
 - Rename build_and_analyze command to trace_file
+- Minor fixes (intial zoom and resizing)
 
 ## [1.0.3]
 
