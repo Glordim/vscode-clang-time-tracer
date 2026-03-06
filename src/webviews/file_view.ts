@@ -74,6 +74,7 @@ const canvas = document.getElementById('canvas') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
 const tooltip = document.getElementById('tooltip') as HTMLDivElement;
 const contextMenu = document.getElementById('context-menu') as HTMLDivElement;
+const overlay = document.getElementById('loadingOverlay') as HTMLElement;
 
 let threads: Thread[] = [];
 let maxTraceTime = 0;
@@ -339,9 +340,6 @@ function drawEvent(ev: ProcessedEvent, rowOffsetY: number) {
 }
 
 function render(): void {
-
-	const canvas = document.getElementById('mainCanvas') as HTMLCanvasElement;
-	const overlay = document.getElementById('loadingOverlay') as HTMLElement;
 
 	if (threads.length === 0) {
 		canvas.style.display = 'none';
