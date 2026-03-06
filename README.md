@@ -2,8 +2,6 @@
 
 **Clang Time Tracer** is a visualizer for Clang's `-ftime-trace` data. It allows C++ developers to profile their builds and identify which headers or functions are slowing down compilation.
 
-
-
 ## Features
 
 * **Build & Analyze**: Automatically injects `-ftime-trace` into your compiler arguments and launches the visualization for the current file.
@@ -27,16 +25,39 @@ This extension contributes the following settings:
 
 * `clangTimeTracer.compileCommands.path`: The relative path to the folder containing your `compile_commands.json`. Defaults to the `build` folder.
 
-## Usage & Troubleshooting
+## Usage & Workflows
 
-1. Open a C++ source file (`.cpp`, `.cxx`, `.cc`, etc.).
-2. Run the command: **Clang Time Tracer: Build and Analyze**.
-3. Use the **Mouse Wheel** to zoom and **Click & Drag** to pan.
+**Clang Time Tracer** offers two ways to analyze your build performance depending on your needs:
 
-### Important Note on Build Systems
-Since this extension executes the compiler command directly from `compile_commands.json` without invoking your full build system (CMake, Bazel, Meson, etc.), you may need to **manually run a build once** before analyzing. This ensures that any dynamically generated elements—such as generated headers, Protobuf files, or Precompiled Headers (PCH)—are available for the compiler.
+### 1. File Level: Deep Dive Analysis
+Perfect for optimizing a specific source file that feels sluggish.
+* **How to run**: Open a C++ file and run the command `Clang Time Tracer: Trace file`.
+* **Result**: Launches an interactive timeline of the compilation process.
+* **Navigation**: Use **Mouse Wheel** to zoom and **Click & Drag** to pan.
 
-![Clang Time Tracer Demo](doc/ClangTimeTracerDemo.png)
+![Trace Screenshot](doc/Screenshots/Trace.png)
+
+### 2. Folder Level: Project Overview
+Ideal for identifying project-wide bottlenecks and finding candidates for Precompiled Headers (PCH).
+* **How to run**: 
+	* Right-click any folder in the **Explorer** and select `Clang Time Tracer: Trace folder`.
+	* OR run `Clang Time Tracer: Trace folder` from the Command Palette (a folder picker will help you target the directory).
+* **Result**: Analyzes all generated trace files in the folder and opens a dashboard with three specialized visualizers:
+	* **Slow Files**: Identifies the source files that take the longest to compile. *Double-click a file to open its detailed trace timeline.*
+	* **Heavy Headers**: Highlights headers with the highest "self-time" (cost of parsing the header itself).
+	* **Header Impact**: Shows headers with the highest cumulative time across all files. This is the ultimate tool to decide which headers should go into a **PCH**.
+
+![Slow Files Screenshot](doc/Screenshots/SlowFiles.png)
+
+![Heavy Header Screenshot](doc/Screenshots/HeavyHeader.png)
+
+![Header Impact Screenshot](doc/Screenshots/HeaderImpact.png)
+
+## Troubleshooting & Requirements
+
+* **Build First**: Since the extension executes compiler commands directly from `compile_commands.json`, you must **manually run your build once** (via CMake, Ninja, etc.) before tracing. This ensures generated headers (Protobuf, etc.) or PCHs are present.
+* **Compilation Database**: A `compile_commands.json` is required. You can point the extension to it via the `clangTimeTracer.compileCommands.path` setting (defaults to the `build` folder).
+* **Clang 9+**: Ensure your compiler is Clang-based to support the `-ftime-trace` flag.
 
 ---
 

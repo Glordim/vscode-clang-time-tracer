@@ -4,6 +4,7 @@ out/**
 node_modules/**
 src/**
 .gitignore
+.github/**
 .yarnrc
 esbuild.js
 vsc-extension-quickstart.md
@@ -12,3 +13,4 @@ vsc-extension-quickstart.md
 **/*.map
 **/*.ts
 **/.vscode-test.*
+doc/Screenshots/**
