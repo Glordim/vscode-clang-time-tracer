@@ -69,13 +69,13 @@ export async function collectAndMergeTrace(tracePaths: { tracePath: string, sour
 	return finalResult;
 }
 
-function processClangTrace(filePath: string, sourcePath: string, traceResult: TraceResult): boolean {
-	const rawData = fs.readFileSync(filePath, 'utf-8');
+function processClangTrace(tracePath: string, sourcePath: string, traceResult: TraceResult): boolean {
+	const rawData = fs.readFileSync(tracePath, 'utf-8');
 	const json = JSON.parse(rawData);
 	const events = json.traceEvents;
 
 	let fileStat: FileStats = {
-		tracePath: filePath,
+		tracePath: tracePath,
 		sourcePath: sourcePath,
 		totalTime: 0,
 		sourceTime: 0,
