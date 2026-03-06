@@ -9,6 +9,18 @@
 			--tab-height: 35px;
 		}
 
+		#tab-description {
+			padding: 6px 16px;
+			font-size: 12px;
+			color: var(--vscode-descriptionForeground);
+			border-bottom: 1px solid var(--vscode-panel-border);
+			display: flex;
+			align-items: center;
+			gap: 12px;
+			flex-wrap: wrap;
+			min-height: 28px;
+		}
+
 		body {
 			margin: 0;
 			padding: 0;
@@ -87,10 +99,13 @@
 
 <body>
 	<nav class="tab-header">
-		<button class="tab-btn active" data-target="Files">Files</button>
-		<button class="tab-btn" data-target="Includes">Includes</button>
-		<button class="tab-btn" data-target="IncludesCumulatedTime">Includes (Cumulated time)</button>
+		<button class="tab-btn active" data-target="Files">Slow Files</button>
+		<button class="tab-btn" data-target="Includes">Heavy Headers</button>
+		<button class="tab-btn" data-target="IncludesCumulatedTime">Header Impact</button>
 	</nav>
+	<div id="tab-description">
+		<span id="desc-text"></span>
+	</div>
 	<div id="canvasContainer" style="overflow-y: auto; height: 100vh; position: relative;">
 		<div id="loadingOverlay"
 			style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center;">

@@ -35,6 +35,12 @@ let data: TraceResult;
 let currentView: 'Files' | 'Includes' | 'IncludesCumulatedTime' = 'Files';
 let currentList: any[] = [];
 
+const tabDescriptions: Record<string, string> = {
+	'Files': 'Translation units sorted by total compilation time — spot which files are the biggest bottlenecks in your build.',
+	'Includes': 'Headers sorted by their own parse time — large headers that are inherently expensive to process.',
+	'IncludesCumulatedTime': 'Headers sorted by their total cost across all files that include them. A small header included in 500 files can outweigh a large one included once. This list is a great starting point for defining the contents of a Precompiled Header (PCH).'
+};
+
 const canvas = document.getElementById('mainCanvas') as HTMLCanvasElement;
 const overlay = document.getElementById('loadingOverlay') as HTMLElement;
 const container = document.getElementById('canvasContainer') as HTMLElement;
@@ -48,6 +54,11 @@ const topOffset = 60;
 
 function initTabs(): void {
 	const tabs = document.querySelectorAll<HTMLButtonElement>('.tab-btn');
+	const descText = document.getElementById('desc-text') as HTMLElement;
+
+	function updateDescription(view: string) {
+		descText.textContent = tabDescriptions[view] ?? '';
+	}
 
 	tabs.forEach(btn => {
 		btn.addEventListener('click', () => {
@@ -58,6 +69,7 @@ function initTabs(): void {
 			btn.classList.add('active');
 
 			currentView = target;
+			updateDescription(target);
 			render();
 		});
 	});
@@ -69,6 +81,7 @@ function initTabs(): void {
 	});
 	resizeObserver.observe(container);
 
+	updateDescription(currentView);
 	render();
 }
 
