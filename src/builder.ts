@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as os from 'os';
 import path from "path";
 import { spawn } from 'child_process';
 import { CompileEntry } from "./compilationDatabase";
@@ -112,7 +113,7 @@ export async function buildMultipleEntries(entries: CompileEntry[], outputChanne
 		cancellable: true
 	}, async (progress, token) => {
 
-		const limit = require('os').cpus().length;
+		const limit = os.cpus().length;
 		const queue = [...entries];
 		let isCancelled = false;
 

@@ -33,9 +33,20 @@ interface TraceResult {
 
 let data: TraceResult;
 let currentView: 'Files' | 'Includes' | 'IncludesCumulatedTime' = 'Files';
+let currentList: any[] = [];
+
+const canvas = document.getElementById('mainCanvas') as HTMLCanvasElement;
+const overlay = document.getElementById('loadingOverlay') as HTMLElement;
+const container = document.getElementById('canvasContainer') as HTMLElement;
+const virtualHeight = document.getElementById('virtualHeight') as HTMLElement;
+const ctx = canvas.getContext('2d')!;
+
+const boxHeight = 42;
+const boxPadding = 6;
+const itemFullHeight = boxHeight + boxPadding;
+const topOffset = 60;
 
 function initTabs(): void {
-	const container = document.getElementById('canvasContainer')!;
 	const tabs = document.querySelectorAll<HTMLButtonElement>('.tab-btn');
 
 	tabs.forEach(btn => {
@@ -63,9 +74,6 @@ function initTabs(): void {
 
 function render(): void {
 
-	const canvas = document.getElementById('mainCanvas') as HTMLCanvasElement;
-	const overlay = document.getElementById('loadingOverlay') as HTMLElement;
-
 	if (!data) {
 		canvas.style.display = 'none';
 		overlay.style.display = 'block';
@@ -74,15 +82,6 @@ function render(): void {
 
 	canvas.style.display = 'block';
 	overlay.style.display = 'none';
-
-	const container = document.getElementById('canvasContainer')!;
-	const virtualHeight = document.getElementById('virtualHeight')!;
-	const ctx = canvas.getContext('2d')!;
-
-	const boxHeight = 42;
-	const boxPadding = 6;
-	const itemFullHeight = boxHeight + boxPadding;
-	const topOffset = 60;
 
 	canvas.width = container.clientWidth;
 	canvas.height = container.clientHeight;
@@ -93,6 +92,8 @@ function render(): void {
 	else if (currentView === 'IncludesCumulatedTime') { list = data.cumulatedIncludes; }
 
 	if (!list || list.length === 0) { return; }
+
+	currentList = list;
 
 	const totalHeight = list.length * itemFullHeight + topOffset + 50;
 	virtualHeight.style.height = `${totalHeight}px`;
@@ -148,20 +149,21 @@ function render(): void {
 		ctx.fillText(timeStr, 10 + boxWidth + 10, startY + 25);
 	}
 
-	canvas.onmousemove = (e) => {
-		const rect = canvas.getBoundingClientRect();
-		const mouseY = e.clientY - rect.top;
-		const realY = mouseY + scrollTop - topOffset;
-		const index = Math.floor(realY / itemFullHeight);
-
-		if (index >= 0 && index < list.length && realY >= 0) {
-			canvas.title = list[index].Path;
-			canvas.style.cursor = 'pointer';
-		} else {
-			canvas.style.cursor = 'default';
-		}
-	};
 }
+
+canvas.addEventListener('mousemove', (e) => {
+	const rect = canvas.getBoundingClientRect();
+	const mouseY = e.clientY - rect.top;
+	const realY = mouseY + container.scrollTop - topOffset;
+	const index = Math.floor(realY / itemFullHeight);
+
+	if (index >= 0 && index < currentList.length && realY >= 0) {
+		canvas.title = currentList[index].Path;
+		canvas.style.cursor = 'pointer';
+	} else {
+		canvas.style.cursor = 'default';
+	}
+});
 
 // --- HELPERS ---
 

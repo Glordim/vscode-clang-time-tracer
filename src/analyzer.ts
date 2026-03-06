@@ -60,7 +60,7 @@ export async function collectAndMergeTrace(tracePaths: string[]): Promise<TraceR
 
 			progress.report({
 				increment: (1 / tracePaths.length) * 100,
-				message: `Analyse de ${path.basename(filePath)}`
+				message: `Analyzing ${path.basename(filePath)}`
 			});
 		}
 	});
