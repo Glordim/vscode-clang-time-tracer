@@ -10,6 +10,7 @@ interface IncludeStats {
 	Path: string;
 	Time: number;
 	Count: number;
+	IncludedBy: string[];
 }
 
 interface CodeGenStats {
@@ -22,6 +23,7 @@ interface CumulatedIncludeStats {
 	Path: string;
 	TotalTime: number;
 	Count: number;
+	IncludedBy: string[];
 }
 
 interface TraceResult {
@@ -34,6 +36,8 @@ interface TraceResult {
 let data: TraceResult;
 let currentView: 'Files' | 'Includes' | 'IncludesCumulatedTime' = 'Files';
 let currentList: any[] = [];
+let expandedItems = new Set<number>();
+let itemYPositions: number[] = [];
 
 const tabDescriptions: Record<string, string> = {
 	'Files': 'Translation units sorted by total compilation time — spot which files are the biggest bottlenecks in your build.',
@@ -50,7 +54,35 @@ const ctx = canvas.getContext('2d')!;
 const boxHeight = 42;
 const boxPadding = 6;
 const itemFullHeight = boxHeight + boxPadding;
-const topOffset = 60;
+const subItemHeight = 20;
+const topOffset = 10;
+
+function getItemHeight(index: number): number {
+	const item = currentList[index];
+	if (expandedItems.has(index) && item.IncludedBy?.length) {
+		return itemFullHeight + item.IncludedBy.length * subItemHeight + 8;
+	}
+	return itemFullHeight;
+}
+
+function computeItemPositions(): void {
+	itemYPositions = [];
+	let y = topOffset;
+	for (let i = 0; i < currentList.length; i++) {
+		itemYPositions.push(y);
+		y += getItemHeight(i);
+	}
+	virtualHeight.style.height = `${y + 50}px`;
+}
+
+function findItemAtY(y: number): number {
+	for (let i = 0; i < itemYPositions.length; i++) {
+		if (y >= itemYPositions[i] && y < itemYPositions[i] + getItemHeight(i)) {
+			return i;
+		}
+	}
+	return -1;
+}
 
 function initTabs(): void {
 	const tabs = document.querySelectorAll<HTMLButtonElement>('.tab-btn');
@@ -74,10 +106,12 @@ function initTabs(): void {
 		});
 	});
 
-	container.addEventListener('scroll', () => requestAnimationFrame(render));
+	container.addEventListener('scroll', () => requestAnimationFrame(drawList));
 
 	const resizeObserver = new ResizeObserver(() => {
-		requestAnimationFrame(render);
+		canvas.width = container.clientWidth;
+		canvas.height = container.clientHeight;
+		requestAnimationFrame(drawList);
 	});
 	resizeObserver.observe(container);
 
@@ -107,101 +141,143 @@ function render(): void {
 	if (!list || list.length === 0) { return; }
 
 	currentList = list;
+	expandedItems.clear();
+	computeItemPositions();
 
-	const totalHeight = list.length * itemFullHeight + topOffset + 50;
-	virtualHeight.style.height = `${totalHeight}px`;
+	drawList();
+}
 
-	const scrollTop = container.scrollTop;
-	const startIndex = Math.floor(Math.max(0, scrollTop - topOffset) / itemFullHeight);
-	const endIndex = Math.min(list.length, Math.ceil((scrollTop + canvas.height) / itemFullHeight));
+function drawList(): void {
+	if (!currentList.length) { return; }
 
-	const maxTime = Math.max(...list.map(f => f.TotalTime || f.Time || 0));
+	const maxTime = Math.max(...currentList.map(f => f.TotalTime || f.Time || 0));
 	const maxCanvasWidth = canvas.width - 40;
+	const scrollTop = container.scrollTop;
 
 	ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-	if (currentView === 'Files') { drawLegend(ctx, 10, 25); }
+	for (let i = 0; i < currentList.length; i++) {
+		const screenTop = itemYPositions[i] - scrollTop;
+		const screenBottom = screenTop + getItemHeight(i);
+		if (screenBottom < 0) { continue; }
+		if (screenTop > canvas.height) { break; }
 
-	for (let i = startIndex; i < endIndex; i++) {
-		const item = list[i];
+		const item = currentList[i];
 		const itemTime = item.TotalTime || item.Time;
-
-		const startY = i * itemFullHeight + topOffset - scrollTop;
 
 		let fileName = item.Path.split(/[\\/]/).pop() || item.Path;
 		fileName = fileName.replace('.cpp.json', '.cpp').replace('.json', '');
 
 		const boxWidth = Math.max((itemTime / maxTime) * (maxCanvasWidth - 100), 150);
+		const isExpandable = currentView !== 'Files' && item.IncludedBy?.length > 0;
+		const isExpanded = expandedItems.has(i);
+
+		const expandedListHeight = isExpanded && item.IncludedBy?.length
+			? item.IncludedBy.length * subItemHeight + 8
+			: 0;
+		const totalBoxHeight = boxHeight + expandedListHeight;
 
 		ctx.fillStyle = '#2d2d2d';
 		ctx.strokeStyle = '#454545';
-		roundRect(ctx, 10, startY, boxWidth, boxHeight, 4, true, true);
+		roundRect(ctx, 10, screenTop, boxWidth, totalBoxHeight, 4, true, true);
 
 		ctx.fillStyle = '#e0e0e0';
 		ctx.font = '13px sans-serif';
-		ctx.fillText(fileName, 20, startY + 18);
+		ctx.fillText(fileName, 20, screenTop + 18);
 
 		if (currentView === 'Files') {
-			const barY = startY + 26;
-			const barH = 4;
-			const sourceW = (item.SourceTime / item.TotalTime) * boxWidth;
-			const codeGenW = (item.CodeGenTime / item.TotalTime) * boxWidth;
-			const optimW = (item.OptimTime / item.TotalTime) * boxWidth;
+			const barY = screenTop + 24;
+			const barH = 12;
+			const pct = item.SourceTime / item.TotalTime;
+			const sourceW = pct * (boxWidth - 20);
 
-			ctx.fillStyle = getColor("Source");
-			ctx.fillRect(20, barY, sourceW, barH);
-			ctx.fillStyle = getColor("InstantiateFunction");
-			ctx.fillRect(20, barY + barH, codeGenW, barH);
-			ctx.fillStyle = getColor("OptModule");
-			ctx.fillRect(20, barY + (barH * 2), optimW, barH);
+			ctx.fillStyle = '#4a9e5c';
+			roundRect(ctx, 20, barY, Math.max(sourceW, 4), barH, 3, true, false);
+
+			ctx.font = '9px sans-serif';
+			ctx.fillStyle = '#ffffff';
+			ctx.fillText(`${Math.round(pct * 100)}% includes`, 24, barY + 9);
+		} else {
+			ctx.fillStyle = '#888888';
+			ctx.font = '10px sans-serif';
+			const arrow = isExpandable ? (isExpanded ? '▼ ' : '▶ ') : '';
+			ctx.fillText(`${arrow}${item.Count} inclusion${item.Count > 1 ? 's' : ''}`, 20, screenTop + 34);
 		}
 
 		ctx.fillStyle = '#888888';
 		ctx.font = '10px sans-serif';
 		const timeStr = `${(itemTime / 1000).toFixed(1)} ms`;
-		ctx.fillText(timeStr, 10 + boxWidth + 10, startY + 25);
+		ctx.fillText(timeStr, 10 + boxWidth + 10, screenTop + 25);
+
+		if (isExpanded && item.IncludedBy?.length) {
+			const listTop = screenTop + boxHeight;
+			ctx.font = '11px sans-serif';
+			item.IncludedBy.forEach((srcPath: string, j: number) => {
+				let srcName = srcPath.split(/[\\/]/).pop() || srcPath;
+				srcName = srcName.replace('.cpp.json', '.cpp').replace('.json', '');
+				const rowY = listTop + j * subItemHeight;
+				ctx.fillStyle = j % 2 === 0 ? '#333333' : '#2d2d2d';
+				ctx.fillRect(11, rowY, boxWidth - 2, subItemHeight);
+				ctx.fillStyle = '#cccccc';
+				ctx.fillText(srcName, 24, rowY + 14);
+			});
+		}
 	}
 
 }
 
 canvas.addEventListener('mousemove', (e) => {
 	const rect = canvas.getBoundingClientRect();
-	const mouseY = e.clientY - rect.top;
-	const realY = mouseY + container.scrollTop - topOffset;
-	const index = Math.floor(realY / itemFullHeight);
+	const realY = e.clientY - rect.top + container.scrollTop;
+	const index = findItemAtY(realY);
 
-	if (index >= 0 && index < currentList.length && realY >= 0) {
-		canvas.title = currentList[index].Path;
-		canvas.style.cursor = 'pointer';
+	if (index >= 0) {
+		const item = currentList[index];
+		// Check if hovering a sub-item row
+		const itemTop = itemYPositions[index];
+		const subOffset = realY - itemTop - itemFullHeight;
+		if (expandedItems.has(index) && subOffset >= 0 && item.IncludedBy?.length) {
+			const subIndex = Math.floor(subOffset / subItemHeight);
+			if (subIndex < item.IncludedBy.length) {
+				canvas.title = item.IncludedBy[subIndex];
+			}
+		} else {
+			canvas.title = item.Path;
+		}
+		canvas.style.cursor = currentView !== 'Files' && item.IncludedBy?.length ? 'pointer' : 'default';
 	} else {
+		canvas.title = '';
 		canvas.style.cursor = 'default';
 	}
 });
 
+canvas.addEventListener('click', (e) => {
+	if (currentView === 'Files') { return; }
+
+	const rect = canvas.getBoundingClientRect();
+	const realY = e.clientY - rect.top + container.scrollTop;
+	const index = findItemAtY(realY);
+
+	if (index < 0) { return; }
+	const item = currentList[index];
+	if (!item.IncludedBy?.length) { return; }
+
+	// Only toggle if click is on the base box, not on a sub-item row
+	const itemTop = itemYPositions[index];
+	if (realY > itemTop + itemFullHeight) { return; }
+
+	if (expandedItems.has(index)) {
+		expandedItems.delete(index);
+	} else {
+		expandedItems.add(index);
+	}
+	computeItemPositions();
+	requestAnimationFrame(drawList);
+});
+
 // --- HELPERS ---
 
-function getColor(name: string): string {
-	let hash = 0;
-	for (let i = 0; i < name.length; i++) {
-		hash = name.charCodeAt(i) + ((hash << 5) - hash);
-	}
-	return `hsl(${Math.abs(hash % 360)}, 50%, 45%)`;
-}
 
-function drawLegend(ctx: CanvasRenderingContext2D, x: number, y: number) {
-	const categories = [
-		{ label: 'Source', color: getColor("Source") },
-		{ label: 'CodeGen', color: getColor("InstantiateFunction") },
-		{ label: 'Opti', color: getColor("OptModule") }
-	];
-	ctx.font = '11px sans-serif';
-	categories.forEach((cat, i) => {
-		ctx.fillStyle = cat.color;
-		ctx.fillRect(x + (i * 100), y - 10, 10, 10);
-		ctx.fillStyle = '#cccccc';
-		ctx.fillText(cat.label, x + 15 + (i * 100), y);
-	});
-}
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number, fill: boolean, stroke: boolean) {
 	ctx.beginPath();

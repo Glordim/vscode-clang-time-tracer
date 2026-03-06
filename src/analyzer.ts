@@ -14,6 +14,7 @@ export interface IncludeStats {
 	Path: string;
 	Time: number;
 	Count: number;
+	IncludedBy: string[];
 }
 
 export interface CodeGenStats {
@@ -26,6 +27,7 @@ export interface CumulatedIncludeStats {
 	Path: string;
 	TotalTime: number;
 	Count: number;
+	IncludedBy: string[];
 }
 
 export interface TraceResult {
@@ -67,8 +69,10 @@ export async function collectAndMergeTrace(tracePaths: string[]): Promise<TraceR
 
 	finalResult.files.sort((a, b) => b.TotalTime - a.TotalTime);
 	finalResult.includes.sort((a, b) => b.Time - a.Time);
+	finalResult.includes.forEach(i => i.IncludedBy.sort((a, b) => a.localeCompare(b)));
 	finalResult.codeGen.sort((a, b) => b.Time - a.Time);
 	finalResult.cumulatedIncludes.sort((a, b) => b.TotalTime - a.TotalTime);
+	finalResult.cumulatedIncludes.forEach(i => i.IncludedBy.sort((a, b) => a.localeCompare(b)));
 
 	return finalResult;
 }
@@ -114,11 +118,13 @@ function processClangTrace(filePath: string, traceResult: TraceResult): boolean 
 			if (existingInc) {
 				existingInc.Time = Math.max(existingInc.Time, dur);
 				existingInc.Count += 1;
+				if (!existingInc.IncludedBy.includes(filePath)) { existingInc.IncludedBy.push(filePath); }
 			} else {
 				traceResult.includes.push({
 					Path: detail,
 					Time: dur,
-					Count: 1
+					Count: 1,
+					IncludedBy: [filePath]
 				});
 			}
 
@@ -126,11 +132,13 @@ function processClangTrace(filePath: string, traceResult: TraceResult): boolean 
 			if (existingCumul) {
 				existingCumul.TotalTime += dur;
 				existingCumul.Count += 1;
+				if (!existingCumul.IncludedBy.includes(filePath)) { existingCumul.IncludedBy.push(filePath); }
 			} else {
 				traceResult.cumulatedIncludes.push({
 					Path: detail,
 					TotalTime: dur,
-					Count: 1
+					Count: 1,
+					IncludedBy: [filePath]
 				});
 			}
 			continue;
