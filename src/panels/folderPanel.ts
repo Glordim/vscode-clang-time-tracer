@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { BasePanel } from './basePanel';
+import { TraceVisualizerPanel } from './filePanel';
 
 export class FolderAnalysisPanel extends BasePanel {
 
@@ -35,6 +36,9 @@ export class FolderAnalysisPanel extends BasePanel {
 					}, () => vscode.window.showErrorMessage("Unable to open: " + message.path));
 					return;
 				}
+				case 'openTrace':
+					TraceVisualizerPanel.createOrShow(this._extensionUri, message.path.trim());
+					return;
 				case 'copyPath':
 					vscode.env.clipboard.writeText(message.path.trim());
 					vscode.window.setStatusBarMessage("File path copied!", 2000);

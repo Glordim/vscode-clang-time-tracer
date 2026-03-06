@@ -55,6 +55,7 @@ const contextMenu = document.getElementById('context-menu') as HTMLDivElement;
 const ctx = canvas.getContext('2d')!;
 
 let rightClickedPath: string | null = null;
+let rightClickedTracePath: string | null = null;
 
 const boxHeight = 42;
 const boxPadding = 6;
@@ -201,7 +202,7 @@ function drawList(): void {
 			roundRect(ctx, 20, barY, Math.max(sourceW, 4), barH, 3, true, false);
 
 			ctx.font = '9px sans-serif';
-			ctx.fillStyle = '#ffffff';
+			ctx.fillStyle = '#dddddd';
 			ctx.fillText(`${Math.round(pct * 100)}% includes`, 24, barY + 9);
 		} else {
 			ctx.fillStyle = '#888888';
@@ -314,6 +315,28 @@ canvas.addEventListener('click', (e) => {
 	requestAnimationFrame(drawList);
 });
 
+canvas.addEventListener('dblclick', (e) => {
+	if (currentView !== 'Files') { return; }
+
+	const rect = canvas.getBoundingClientRect();
+	const mouseX = e.clientX - rect.left;
+	const realY = e.clientY - rect.top + container.scrollTop;
+	const index = findItemAtY(realY);
+
+	if (index < 0) { return; }
+
+	const item = currentList[index];
+	const itemTime = item.TotalTime || item.Time;
+	const maxTime = Math.max(...currentList.map((f: any) => f.TotalTime || f.Time || 0));
+	const boxWidth = Math.max((itemTime / maxTime) * (canvas.width - 40 - 100), 150);
+
+	if (mouseX >= 10 && mouseX <= 10 + boxWidth && vscode) {
+		selectedIndex = index;
+		requestAnimationFrame(drawList);
+		vscode.postMessage({ command: 'openTrace', path: item.Path });
+	}
+});
+
 canvas.addEventListener('contextmenu', (e) => {
 	e.preventDefault();
 
@@ -335,6 +358,7 @@ canvas.addEventListener('contextmenu', (e) => {
 
 		if (mouseX >= 10 && mouseX <= 10 + boxWidth) {
 			rightClickedPath = item.SourcePath;
+			rightClickedTracePath = item.Path;
 			selectedIndex = index;
 			requestAnimationFrame(drawList);
 			contextMenu.style.display = 'block';
@@ -354,6 +378,12 @@ window.addEventListener('click', () => {
 document.getElementById('menu-open-file')?.addEventListener('click', () => {
 	if (rightClickedPath && vscode) {
 		vscode.postMessage({ command: 'openFile', path: rightClickedPath });
+	}
+});
+
+document.getElementById('menu-open-trace')?.addEventListener('click', () => {
+	if (rightClickedTracePath && vscode) {
+		vscode.postMessage({ command: 'openTrace', path: rightClickedTracePath });
 	}
 });
 
