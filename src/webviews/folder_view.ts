@@ -38,6 +38,7 @@ let currentView: 'Files' | 'Includes' | 'IncludesCumulatedTime' = 'Files';
 let currentList: any[] = [];
 let expandedItems = new Set<number>();
 let itemYPositions: number[] = [];
+let selectedIndex: number | null = null;
 
 const tabDescriptions: Record<string, string> = {
 	'Files': 'Translation units sorted by total compilation time — spot which files are the biggest bottlenecks in your build.',
@@ -142,6 +143,7 @@ function render(): void {
 
 	currentList = list;
 	expandedItems.clear();
+	selectedIndex = null;
 	computeItemPositions();
 
 	drawList();
@@ -222,56 +224,89 @@ function drawList(): void {
 				ctx.fillText(srcName, 24, rowY + 14);
 			});
 		}
+
+		if (selectedIndex === i) {
+			ctx.strokeStyle = 'white';
+			ctx.lineWidth = 2;
+			roundRect(ctx, 10, screenTop, boxWidth, totalBoxHeight, 4, false, true);
+			ctx.lineWidth = 1;
+			ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+			roundRect(ctx, 10, screenTop, boxWidth, totalBoxHeight, 4, true, false);
+		}
 	}
 
 }
 
 canvas.addEventListener('mousemove', (e) => {
 	const rect = canvas.getBoundingClientRect();
+	const mouseX = e.clientX - rect.left;
 	const realY = e.clientY - rect.top + container.scrollTop;
 	const index = findItemAtY(realY);
 
 	if (index >= 0) {
 		const item = currentList[index];
-		// Check if hovering a sub-item row
-		const itemTop = itemYPositions[index];
-		const subOffset = realY - itemTop - itemFullHeight;
-		if (expandedItems.has(index) && subOffset >= 0 && item.IncludedBy?.length) {
-			const subIndex = Math.floor(subOffset / subItemHeight);
-			if (subIndex < item.IncludedBy.length) {
-				canvas.title = item.IncludedBy[subIndex];
+		const itemTime = item.TotalTime || item.Time;
+		const maxTime = Math.max(...currentList.map((f: any) => f.TotalTime || f.Time || 0));
+		const boxWidth = Math.max((itemTime / maxTime) * (canvas.width - 40 - 100), 150);
+
+		if (mouseX >= 10 && mouseX <= 10 + boxWidth) {
+			const itemTop = itemYPositions[index];
+			const subOffset = realY - itemTop - itemFullHeight;
+			if (expandedItems.has(index) && subOffset >= 0 && item.IncludedBy?.length) {
+				const subIndex = Math.floor(subOffset / subItemHeight);
+				if (subIndex < item.IncludedBy.length) {
+					canvas.title = item.IncludedBy[subIndex];
+				}
+			} else {
+				canvas.title = item.Path;
 			}
-		} else {
-			canvas.title = item.Path;
+			canvas.style.cursor = 'pointer';
+			return;
 		}
-		canvas.style.cursor = currentView !== 'Files' && item.IncludedBy?.length ? 'pointer' : 'default';
-	} else {
-		canvas.title = '';
-		canvas.style.cursor = 'default';
 	}
+
+	canvas.title = '';
+	canvas.style.cursor = 'default';
 });
 
 canvas.addEventListener('click', (e) => {
-	if (currentView === 'Files') { return; }
-
 	const rect = canvas.getBoundingClientRect();
+	const mouseX = e.clientX - rect.left;
 	const realY = e.clientY - rect.top + container.scrollTop;
 	const index = findItemAtY(realY);
 
-	if (index < 0) { return; }
-	const item = currentList[index];
-	if (!item.IncludedBy?.length) { return; }
-
-	// Only toggle if click is on the base box, not on a sub-item row
-	const itemTop = itemYPositions[index];
-	if (realY > itemTop + itemFullHeight) { return; }
-
-	if (expandedItems.has(index)) {
-		expandedItems.delete(index);
-	} else {
-		expandedItems.add(index);
+	if (index < 0) {
+		selectedIndex = null;
+		requestAnimationFrame(drawList);
+		return;
 	}
-	computeItemPositions();
+
+	const item = currentList[index];
+	const itemTime = item.TotalTime || item.Time;
+	const maxTime = Math.max(...currentList.map((f: any) => f.TotalTime || f.Time || 0));
+	const boxWidth = Math.max((itemTime / maxTime) * (canvas.width - 40 - 100), 150);
+
+	if (mouseX < 10 || mouseX > 10 + boxWidth) {
+		selectedIndex = null;
+		requestAnimationFrame(drawList);
+		return;
+	}
+
+	selectedIndex = index;
+
+	// Expand/collapse: only on the arrow glyph bounding box (drawn at x=20, y=itemTop+34, ~14px wide, 10px tall)
+	if (currentView !== 'Files' && item.IncludedBy?.length) {
+		const relY = realY - itemYPositions[index];
+		if (relY >= 24 && relY <= 38 && mouseX >= 18 && mouseX <= 34) {
+			if (expandedItems.has(index)) {
+				expandedItems.delete(index);
+			} else {
+				expandedItems.add(index);
+			}
+			computeItemPositions();
+		}
+	}
+
 	requestAnimationFrame(drawList);
 });
 
