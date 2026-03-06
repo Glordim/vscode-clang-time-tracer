@@ -101,11 +101,11 @@ export async function buildEntry(entry: CompileEntry, outputChannel: vscode.Outp
 	});
 }
 
-export async function buildMultipleEntries(entries: CompileEntry[], outputChannel: vscode.OutputChannel): Promise<[boolean, string[]]> {
+export async function buildMultipleEntries(entries: CompileEntry[], outputChannel: vscode.OutputChannel): Promise<[boolean, { tracePath: string, sourcePath: string }[]]> {
 	const total = entries.length;
 	let completed = 0;
 	let hasErrorOccurred = false;
-	const generatedTracePaths: string[] = [];
+	const generatedTracePaths: { tracePath: string, sourcePath: string }[] = [];
 
 	await vscode.window.withProgress({
 		location: vscode.ProgressLocation.Notification,
@@ -158,7 +158,8 @@ export async function buildMultipleEntries(entries: CompileEntry[], outputChanne
 							increment: (1 / total) * 100,
 							message: `${percent}% - ${fileName}`
 						});
-						generatedTracePaths.push(tracePath);
+						const sourcePath = path.isAbsolute(entry.file) ? entry.file : path.resolve(entry.directory, entry.file);
+					generatedTracePaths.push({ tracePath, sourcePath });
 						resolve(runNext());
 					}
 				});

@@ -4,6 +4,7 @@ import * as path from 'path';
 
 export interface FileStats {
 	Path: string;
+	SourcePath: string;
 	TotalTime: number;
 	SourceTime: number;
 	CodeGenTime: number;
@@ -37,7 +38,7 @@ export interface TraceResult {
 	cumulatedIncludes: CumulatedIncludeStats[];
 }
 
-export async function collectAndMergeTrace(tracePaths: string[]): Promise<TraceResult> {
+export async function collectAndMergeTrace(tracePaths: { tracePath: string, sourcePath: string }[]): Promise<TraceResult> {
 	const finalResult: TraceResult = {
 		files: [],
 		includes: [],
@@ -54,15 +55,15 @@ export async function collectAndMergeTrace(tracePaths: string[]): Promise<TraceR
 		for (let i = 0; i < tracePaths.length; i++) {
 			if (token.isCancellationRequested) { break; }
 
-			const filePath = tracePaths[i];
+			const { tracePath, sourcePath } = tracePaths[i];
 
-			if (await processClangTrace(filePath, finalResult) === false) {
+			if (processClangTrace(tracePath, sourcePath, finalResult) === false) {
 				break;
 			}
 
 			progress.report({
 				increment: (1 / tracePaths.length) * 100,
-				message: `Analyzing ${path.basename(filePath)}`
+				message: `Analyzing ${path.basename(tracePath)}`
 			});
 		}
 	});
@@ -77,13 +78,14 @@ export async function collectAndMergeTrace(tracePaths: string[]): Promise<TraceR
 	return finalResult;
 }
 
-function processClangTrace(filePath: string, traceResult: TraceResult): boolean {
+function processClangTrace(filePath: string, sourcePath: string, traceResult: TraceResult): boolean {
 	const rawData = fs.readFileSync(filePath, 'utf-8');
 	const json = JSON.parse(rawData);
 	const events = json.traceEvents;
 
 	let fileStat: FileStats = {
 		Path: filePath,
+		SourcePath: sourcePath,
 		TotalTime: 0,
 		SourceTime: 0,
 		CodeGenTime: 0,

@@ -1,5 +1,6 @@
 interface FileStats {
 	Path: string;
+	SourcePath: string;
 	TotalTime: number;
 	SourceTime: number;
 	CodeGenTime: number;
@@ -50,7 +51,10 @@ const canvas = document.getElementById('mainCanvas') as HTMLCanvasElement;
 const overlay = document.getElementById('loadingOverlay') as HTMLElement;
 const container = document.getElementById('canvasContainer') as HTMLElement;
 const virtualHeight = document.getElementById('virtualHeight') as HTMLElement;
+const contextMenu = document.getElementById('context-menu') as HTMLDivElement;
 const ctx = canvas.getContext('2d')!;
+
+let rightClickedPath: string | null = null;
 
 const boxHeight = 42;
 const boxPadding = 6;
@@ -167,8 +171,8 @@ function drawList(): void {
 		const item = currentList[i];
 		const itemTime = item.TotalTime || item.Time;
 
-		let fileName = item.Path.split(/[\\/]/).pop() || item.Path;
-		fileName = fileName.replace('.cpp.json', '.cpp').replace('.json', '');
+		const displayPath: string = item.SourcePath ?? item.Path;
+		const fileName = displayPath.split(/[\\/]/).pop() || displayPath;
 
 		const boxWidth = Math.max((itemTime / maxTime) * (maxCanvasWidth - 100), 150);
 		const isExpandable = currentView !== 'Files' && item.IncludedBy?.length > 0;
@@ -308,6 +312,55 @@ canvas.addEventListener('click', (e) => {
 	}
 
 	requestAnimationFrame(drawList);
+});
+
+canvas.addEventListener('contextmenu', (e) => {
+	e.preventDefault();
+
+	if (currentView !== 'Files') {
+		contextMenu.style.display = 'none';
+		return;
+	}
+
+	const rect = canvas.getBoundingClientRect();
+	const mouseX = e.clientX - rect.left;
+	const realY = e.clientY - rect.top + container.scrollTop;
+	const index = findItemAtY(realY);
+
+	if (index >= 0) {
+		const item = currentList[index];
+		const itemTime = item.TotalTime || item.Time;
+		const maxTime = Math.max(...currentList.map((f: any) => f.TotalTime || f.Time || 0));
+		const boxWidth = Math.max((itemTime / maxTime) * (canvas.width - 40 - 100), 150);
+
+		if (mouseX >= 10 && mouseX <= 10 + boxWidth) {
+			rightClickedPath = item.SourcePath;
+			selectedIndex = index;
+			requestAnimationFrame(drawList);
+			contextMenu.style.display = 'block';
+			contextMenu.style.left = `${e.clientX}px`;
+			contextMenu.style.top = `${e.clientY}px`;
+			return;
+		}
+	}
+
+	contextMenu.style.display = 'none';
+});
+
+window.addEventListener('click', () => {
+	contextMenu.style.display = 'none';
+});
+
+document.getElementById('menu-open-file')?.addEventListener('click', () => {
+	if (rightClickedPath && vscode) {
+		vscode.postMessage({ command: 'openFile', path: rightClickedPath });
+	}
+});
+
+document.getElementById('menu-copy-path')?.addEventListener('click', () => {
+	if (rightClickedPath && vscode) {
+		vscode.postMessage({ command: 'copyPath', path: rightClickedPath });
+	}
 });
 
 // --- HELPERS ---

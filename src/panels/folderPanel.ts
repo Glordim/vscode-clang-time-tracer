@@ -28,6 +28,17 @@ export class FolderAnalysisPanel extends BasePanel {
 
 		this._panel.webview.onDidReceiveMessage(message => {
 			switch (message.command) {
+				case 'openFile': {
+					const uri = vscode.Uri.file(message.path.trim());
+					vscode.workspace.openTextDocument(uri).then(doc => {
+						vscode.window.showTextDocument(doc, { viewColumn: vscode.ViewColumn.One });
+					}, () => vscode.window.showErrorMessage("Unable to open: " + message.path));
+					return;
+				}
+				case 'copyPath':
+					vscode.env.clipboard.writeText(message.path.trim());
+					vscode.window.setStatusBarMessage("File path copied!", 2000);
+					return;
 				case 'webviewReady':
 					this._panel.webview.postMessage({
 						command: 'initData',
