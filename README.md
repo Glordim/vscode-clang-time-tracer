@@ -2,14 +2,9 @@
 
 **Clang Time Tracer** is a visualizer for Clang's `-ftime-trace` data. It allows C++ developers to profile their builds and identify which headers or functions are slowing down compilation.
 
-## Features
-
-* **Build & Analyze**: Automatically injects `-ftime-trace` into your compiler arguments and launches the visualization for the current file.
-* **Canvas Renderer**: A custom 2D Canvas engine designed to handle large trace files with smooth zooming and panning.
-
 ## How it works
 
-The extension leverages the `-ftime-trace` flag (available in Clang 9+ and `clang-cl`). When triggered, it:
+The extension leverages the `-ftime-trace` flag (available in Clang 9+). When triggered, it:
 1. Locates the compilation command for the active file.
 2. Executes the compiler with the tracing flag enabled.
 3. Parses the resulting JSON trace and generates an interactive timeline within a VS Code Webview.
@@ -23,7 +18,8 @@ The extension leverages the `-ftime-trace` flag (available in Clang 9+ and `clan
 
 This extension contributes the following settings:
 
-* `clangTimeTracer.compileCommands.path`: The relative path to the folder containing your `compile_commands.json`. Defaults to the `build` folder.
+* `clangTimeTracer.compileCommands.path`: The relative path to the folder containing your `compile_commands.json`.  
+Defaults to the `build` folder.
 
 ## Usage & Workflows
 
