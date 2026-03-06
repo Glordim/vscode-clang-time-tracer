@@ -4,8 +4,8 @@ import * as fs from 'fs';
 import { CompilationDatabase } from './compilationDatabase';
 import { buildEntry, buildMultipleEntries } from './builder';
 import { collectAndMergeTrace } from './analyzer';
-import { TraceVisualizerPanel } from './panels/filePanel';
-import { FolderAnalysisPanel } from './panels/folderPanel';
+import { TraceFilePanel } from './panels/filePanel';
+import { TraceFolderPanel } from './panels/folderPanel';
 import { pickFolderIntegrated } from './ui';
 
 export function activate(context: vscode.ExtensionContext) {
@@ -27,7 +27,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 		if (result) {
 			if (fs.existsSync(tracePath)) {
-				TraceVisualizerPanel.createOrShow(context.extensionUri, tracePath);
+				TraceFilePanel.createOrShow(context.extensionUri, tracePath);
 			} else {
 				outputChannel.appendLine(`[Error] Trace file not found at: ${tracePath}`);
 			}
@@ -36,7 +36,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 	context.subscriptions.push(traceFile);
 
-	const traceFolderCmd = vscode.commands.registerCommand('clang_time_tracer.trace_folder', async (uri?: vscode.Uri) => {
+	const traceFolder = vscode.commands.registerCommand('clang_time_tracer.trace_folder', async (uri?: vscode.Uri) => {
 		let targetUri = uri;
 
 		if (!targetUri) {
@@ -58,7 +58,7 @@ export function activate(context: vscode.ExtensionContext) {
 		const [result, tracePaths] = await buildMultipleEntries(entries, outputChannel);
 		if (result) {
 			const traceResult = await collectAndMergeTrace(tracePaths);
-			FolderAnalysisPanel.createOrShow(
+			TraceFolderPanel.createOrShow(
 				context.extensionUri,
 				traceResult,
 				path.basename(targetUri.fsPath)
@@ -66,5 +66,5 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	});
 
-	context.subscriptions.push(traceFolderCmd);
+	context.subscriptions.push(traceFolder);
 }

@@ -10,7 +10,7 @@ export interface CompileEntry {
 }
 
 export class CompilationDatabase implements vscode.Disposable {
-	private commands = new Map<string, CompileEntry>();
+	private entries = new Map<string, CompileEntry>();
 	private watcher?: vscode.FileSystemWatcher;
 	private loadingPromise?: Promise<void>;
 	private readonly disposables: vscode.Disposable[] = [];
@@ -55,7 +55,7 @@ export class CompilationDatabase implements vscode.Disposable {
 		const reload = () => { this.loadingPromise = this.loadDatabase(folder); };
 		this.watcher.onDidChange(reload);
 		this.watcher.onDidCreate(reload);
-		this.watcher.onDidDelete(() => this.commands.clear());
+		this.watcher.onDidDelete(() => this.entries.clear());
 	}
 
 	private async loadDatabase(folder: vscode.WorkspaceFolder) {
@@ -70,13 +70,13 @@ export class CompilationDatabase implements vscode.Disposable {
 		try {
 			const content = await fs.promises.readFile(dbPath, 'utf8');
 			const data: CompileEntry[] = JSON.parse(content);
-			this.commands.clear();
+			this.entries.clear();
 
 			for (const entry of data) {
 				const fullPath = path.resolve(entry.directory, entry.file);
-				this.commands.set(vscode.Uri.file(fullPath).toString(), entry);
+				this.entries.set(vscode.Uri.file(fullPath).toString(), entry);
 			}
-			this.outputChannel.appendLine(`[DB] Loaded ${this.commands.size} entries.`);
+			this.outputChannel.appendLine(`[DB] Loaded ${this.entries.size} entries.`);
 		} catch (err) {
 			this.outputChannel.appendLine(`[Error] Failed to load compilation database: ${err}`);
 			vscode.window.showErrorMessage(`Clang Time Tracer: Failed to read compile_commands.json. Check Output channel.`);
@@ -85,14 +85,14 @@ export class CompilationDatabase implements vscode.Disposable {
 
 	public async getEntryForFile(uri: vscode.Uri): Promise<CompileEntry | undefined> {
 		await this.loadingPromise;
-		return this.commands.get(uri.toString());
+		return this.entries.get(uri.toString());
 	}
 
 	public getAllEntriesInFolder(folderUri: vscode.Uri): CompileEntry[] {
 		const folderPath = folderUri.fsPath.toLowerCase();
 		const entries: CompileEntry[] = [];
 
-		for (const [uriStr, entry] of this.commands.entries()) {
+		for (const [uriStr, entry] of this.entries.entries()) {
 			const fileFsPath = vscode.Uri.parse(uriStr).fsPath.toLowerCase();
 			if (fileFsPath.startsWith(folderPath)) {
 				entries.push(entry);

@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { BasePanel } from './basePanel';
 
-export class TraceVisualizerPanel extends BasePanel {
+export class TraceFilePanel extends BasePanel {
 
 	public static createOrShow(extensionUri: vscode.Uri, tracePath: string) {
 		const traceData = JSON.parse(fs.readFileSync(tracePath, 'utf8'));
@@ -28,7 +28,7 @@ export class TraceVisualizerPanel extends BasePanel {
 			}
 		);
 
-		new TraceVisualizerPanel(panel, extensionUri, traceData);
+		new TraceFilePanel(panel, extensionUri, traceData);
 	}
 
 	private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, traceData: any) {

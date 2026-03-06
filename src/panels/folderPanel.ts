@@ -1,8 +1,8 @@
 import * as vscode from 'vscode';
 import { BasePanel } from './basePanel';
-import { TraceVisualizerPanel } from './filePanel';
+import { TraceFilePanel } from './filePanel';
 
-export class FolderAnalysisPanel extends BasePanel {
+export class TraceFolderPanel extends BasePanel {
 
 	public static createOrShow(extensionUri: vscode.Uri, data: any, folderName: string) {
 		const panel = vscode.window.createWebviewPanel(
@@ -19,7 +19,7 @@ export class FolderAnalysisPanel extends BasePanel {
 			}
 		);
 
-		new FolderAnalysisPanel(panel, extensionUri, data);
+		new TraceFolderPanel(panel, extensionUri, data);
 	}
 
 	private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, data: any) {
@@ -37,7 +37,7 @@ export class FolderAnalysisPanel extends BasePanel {
 					return;
 				}
 				case 'openTrace':
-					TraceVisualizerPanel.createOrShow(this._extensionUri, message.path.trim());
+					TraceFilePanel.createOrShow(this._extensionUri, message.path.trim());
 					return;
 				case 'copyPath':
 					vscode.env.clipboard.writeText(message.path.trim());

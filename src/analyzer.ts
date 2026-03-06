@@ -3,17 +3,17 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 export interface FileStats {
-	Path: string;
+	TracePath: string;
 	SourcePath: string;
 	TotalTime: number;
 	SourceTime: number;
-	CodeGenTime: number;
+	TemplateTime: number;
 	OptimTime: number;
 }
 
 export interface IncludeStats {
 	Path: string;
-	Time: number;
+	MaxTime: number;
 	Count: number;
 	IncludedBy: string[];
 }
@@ -69,7 +69,7 @@ export async function collectAndMergeTrace(tracePaths: { tracePath: string, sour
 	});
 
 	finalResult.files.sort((a, b) => b.TotalTime - a.TotalTime);
-	finalResult.includes.sort((a, b) => b.Time - a.Time);
+	finalResult.includes.sort((a, b) => b.MaxTime - a.MaxTime);
 	finalResult.includes.forEach(i => i.IncludedBy.sort((a, b) => a.localeCompare(b)));
 	finalResult.codeGen.sort((a, b) => b.Time - a.Time);
 	finalResult.cumulatedIncludes.sort((a, b) => b.TotalTime - a.TotalTime);
@@ -84,11 +84,11 @@ function processClangTrace(filePath: string, sourcePath: string, traceResult: Tr
 	const events = json.traceEvents;
 
 	let fileStat: FileStats = {
-		Path: filePath,
+		TracePath: filePath,
 		SourcePath: sourcePath,
 		TotalTime: 0,
 		SourceTime: 0,
-		CodeGenTime: 0,
+		TemplateTime: 0,
 		OptimTime: 0
 	};
 
@@ -118,13 +118,13 @@ function processClangTrace(filePath: string, sourcePath: string, traceResult: Tr
 
 			let existingInc = traceResult.includes.find(i => i.Path === detail);
 			if (existingInc) {
-				existingInc.Time = Math.max(existingInc.Time, dur);
+				existingInc.MaxTime = Math.max(existingInc.MaxTime, dur);
 				existingInc.Count += 1;
 				if (!existingInc.IncludedBy.includes(filePath)) { existingInc.IncludedBy.push(filePath); }
 			} else {
 				traceResult.includes.push({
 					Path: detail,
-					Time: dur,
+					MaxTime: dur,
 					Count: 1,
 					IncludedBy: [filePath]
 				});
@@ -155,7 +155,7 @@ function processClangTrace(filePath: string, sourcePath: string, traceResult: Tr
 		}
 		*/
 		else if (name === "Total InstantiateFunction") {
-			fileStat.CodeGenTime = dur;
+			fileStat.TemplateTime = dur;
 		}
 		else if (name === "Total OptModule") {
 			fileStat.OptimTime = dur;

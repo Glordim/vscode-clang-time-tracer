@@ -1,15 +1,15 @@
 interface FileStats {
-	Path: string;
+	TracePath: string;
 	SourcePath: string;
 	TotalTime: number;
 	SourceTime: number;
-	CodeGenTime: number;
+	TemplateTime: number;
 	OptimTime: number;
 }
 
 interface IncludeStats {
 	Path: string;
-	Time: number;
+	MaxTime: number;
 	Count: number;
 	IncludedBy: string[];
 }
@@ -35,7 +35,7 @@ interface TraceResult {
 }
 
 let data: TraceResult;
-let currentView: 'Files' | 'Includes' | 'IncludesCumulatedTime' = 'Files';
+let currentView: 'Files' | 'Includes' | 'CumulatedIncludes' = 'Files';
 let currentList: any[] = [];
 let expandedItems = new Set<number>();
 let itemYPositions: number[] = [];
@@ -44,7 +44,7 @@ let selectedIndex: number | null = null;
 const tabDescriptions: Record<string, string> = {
 	'Files': 'Translation units sorted by total compilation time — spot which files are the biggest bottlenecks in your build.',
 	'Includes': 'Headers sorted by their own parse time — large headers that are inherently expensive to process.',
-	'IncludesCumulatedTime': 'Headers sorted by their total cost across all files that include them. A small header included in 500 files can outweigh a large one included once. This list is a great starting point for defining the contents of a Precompiled Header (PCH).'
+	'CumulatedIncludes': 'Headers sorted by their total cost across all files that include them. A small header included in 500 files can outweigh a large one included once. This list is a great starting point for defining the contents of a Precompiled Header (PCH).'
 };
 
 const canvas = document.getElementById('mainCanvas') as HTMLCanvasElement;
@@ -142,7 +142,7 @@ function render(): void {
 	let list: any[] = [];
 	if (currentView === 'Files') { list = data.files; }
 	else if (currentView === 'Includes') { list = data.includes; }
-	else if (currentView === 'IncludesCumulatedTime') { list = data.cumulatedIncludes; }
+	else if (currentView === 'CumulatedIncludes') { list = data.cumulatedIncludes; }
 
 	if (!list || list.length === 0) { return; }
 
@@ -157,7 +157,7 @@ function render(): void {
 function drawList(): void {
 	if (!currentList.length) { return; }
 
-	const maxTime = Math.max(...currentList.map(f => f.TotalTime || f.Time || 0));
+	const maxTime = Math.max(...currentList.map(f => f.TotalTime || f.MaxTime || 0));
 	const maxCanvasWidth = canvas.width - 40;
 	const scrollTop = container.scrollTop;
 
@@ -170,7 +170,7 @@ function drawList(): void {
 		if (screenTop > canvas.height) { break; }
 
 		const item = currentList[i];
-		const itemTime = item.TotalTime || item.Time;
+		const itemTime = item.TotalTime || item.MaxTime;
 
 		const displayPath: string = item.SourcePath ?? item.Path;
 		const fileName = displayPath.split(/[\\/]/).pop() || displayPath;
@@ -250,8 +250,8 @@ canvas.addEventListener('mousemove', (e) => {
 
 	if (index >= 0) {
 		const item = currentList[index];
-		const itemTime = item.TotalTime || item.Time;
-		const maxTime = Math.max(...currentList.map((f: any) => f.TotalTime || f.Time || 0));
+		const itemTime = item.TotalTime || item.MaxTime;
+		const maxTime = Math.max(...currentList.map((f: any) => f.TotalTime || f.MaxTime || 0));
 		const boxWidth = Math.max((itemTime / maxTime) * (canvas.width - 40 - 100), 150);
 
 		if (mouseX >= 10 && mouseX <= 10 + boxWidth) {
@@ -263,7 +263,7 @@ canvas.addEventListener('mousemove', (e) => {
 					canvas.title = item.IncludedBy[subIndex];
 				}
 			} else {
-				canvas.title = item.Path;
+				canvas.title = item.SourcePath ?? item.Path;
 			}
 			canvas.style.cursor = 'pointer';
 			return;
@@ -287,8 +287,8 @@ canvas.addEventListener('click', (e) => {
 	}
 
 	const item = currentList[index];
-	const itemTime = item.TotalTime || item.Time;
-	const maxTime = Math.max(...currentList.map((f: any) => f.TotalTime || f.Time || 0));
+	const itemTime = item.TotalTime || item.MaxTime;
+	const maxTime = Math.max(...currentList.map((f: any) => f.TotalTime || f.MaxTime || 0));
 	const boxWidth = Math.max((itemTime / maxTime) * (canvas.width - 40 - 100), 150);
 
 	if (mouseX < 10 || mouseX > 10 + boxWidth) {
@@ -326,14 +326,14 @@ canvas.addEventListener('dblclick', (e) => {
 	if (index < 0) { return; }
 
 	const item = currentList[index];
-	const itemTime = item.TotalTime || item.Time;
-	const maxTime = Math.max(...currentList.map((f: any) => f.TotalTime || f.Time || 0));
+	const itemTime = item.TotalTime || item.MaxTime;
+	const maxTime = Math.max(...currentList.map((f: any) => f.TotalTime || f.MaxTime || 0));
 	const boxWidth = Math.max((itemTime / maxTime) * (canvas.width - 40 - 100), 150);
 
 	if (mouseX >= 10 && mouseX <= 10 + boxWidth && vscode) {
 		selectedIndex = index;
 		requestAnimationFrame(drawList);
-		vscode.postMessage({ command: 'openTrace', path: item.Path });
+		vscode.postMessage({ command: 'openTrace', path: item.TracePath });
 	}
 });
 
@@ -352,13 +352,13 @@ canvas.addEventListener('contextmenu', (e) => {
 
 	if (index >= 0) {
 		const item = currentList[index];
-		const itemTime = item.TotalTime || item.Time;
-		const maxTime = Math.max(...currentList.map((f: any) => f.TotalTime || f.Time || 0));
+		const itemTime = item.TotalTime || item.MaxTime;
+		const maxTime = Math.max(...currentList.map((f: any) => f.TotalTime || f.MaxTime || 0));
 		const boxWidth = Math.max((itemTime / maxTime) * (canvas.width - 40 - 100), 150);
 
 		if (mouseX >= 10 && mouseX <= 10 + boxWidth) {
 			rightClickedPath = item.SourcePath;
-			rightClickedTracePath = item.Path;
+			rightClickedTracePath = item.TracePath;
 			selectedIndex = index;
 			requestAnimationFrame(drawList);
 			contextMenu.style.display = 'block';
