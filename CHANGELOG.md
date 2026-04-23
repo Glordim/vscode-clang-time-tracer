@@ -2,6 +2,9 @@
 
 All notable changes to the "clang-time-tracer" extension will be documented in this file.
 
+## [1.1.1]
+- Downgrade minimal VS Code version requirement from 1.108 to 1.90
+
 ## [1.1.0]
 - Add trace_folder command
 - Rename build_and_analyze command to trace_file
