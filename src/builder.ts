@@ -4,6 +4,45 @@ import path from "path";
 import { spawn } from 'child_process';
 import { CompileEntry } from "./compilationDatabase";
 
+function splitCommand(command: string): string[] {
+	const args: string[] = [];
+	let current = '';
+	let inDouble = false;
+	let inSingle = false;
+
+	for (let i = 0; i < command.length; i++) {
+		const ch = command[i];
+
+		if (inSingle) {
+			if (ch === "'") { inSingle = false; }
+			else { current += ch; }
+		} else if (inDouble) {
+			if (ch === '"') {
+				inDouble = false;
+			} else if (ch === '\\' && i + 1 < command.length && (command[i + 1] === '"' || command[i + 1] === '\\')) {
+				current += command[++i];
+			} else {
+				current += ch;
+			}
+		} else {
+			if (ch === ' ' || ch === '\t') {
+				if (current.length > 0) { args.push(current); current = ''; }
+			} else if (ch === '"') {
+				inDouble = true;
+			} else if (ch === "'") {
+				inSingle = true;
+			} else if (ch === '\\' && i + 1 < command.length && command[i + 1] === '"') {
+				current += command[++i];
+			} else {
+				current += ch;
+			}
+		}
+	}
+
+	if (current.length > 0) { args.push(current); }
+	return args;
+}
+
 function prepareArguments(entry: CompileEntry, extraArg: string): { exe: string, args: string[] } {
 	let args: string[] = [];
 	let exe = "";
@@ -13,15 +52,9 @@ function prepareArguments(entry: CompileEntry, extraArg: string): { exe: string,
 		exe = first ?? "";
 		args = rest;
 	} else if (entry.command) {
-		const parts = entry.command.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [];
+		const parts = splitCommand(entry.command);
 		exe = parts[0] ?? "";
-
-		args = parts.slice(1).map(arg => {
-			if (/^['"].*['"]$/.test(arg)) {
-				return arg.replace(/^['"]|['"]$/g, '');
-			}
-			return arg.replace(/"/g, '');
-		});
+		args = parts.slice(1);
 	}
 
 	const hasTraceFlag = args.some(arg => arg.includes("-ftime-trace") || arg.includes("/clang:-ftime-trace"));
