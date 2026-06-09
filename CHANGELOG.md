@@ -2,6 +2,9 @@
 
 All notable changes to the "clang-time-tracer" extension will be documented in this file.
 
+## [1.1.2]
+- Fix robust command string parsing with proper quote and escape handling
+
 ## [1.1.1]
 - Downgrade minimal VS Code version requirement from 1.108 to 1.90
 
