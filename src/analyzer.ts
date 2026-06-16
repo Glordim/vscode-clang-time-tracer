@@ -1,4 +1,4 @@
-import * as vscode from 'vscode';
+﻿import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -62,9 +62,14 @@ export async function collectAndMergeTrace(tracePaths: { tracePath: string, sour
 
 	finalResult.files.sort((a, b) => b.totalTime - a.totalTime);
 	finalResult.includes.sort((a, b) => b.maxTime - a.maxTime);
-	finalResult.includes.forEach(i => i.includedBy.sort((a, b) => a.localeCompare(b)));
 	finalResult.cumulatedIncludes.sort((a, b) => b.totalTime - a.totalTime);
-	finalResult.cumulatedIncludes.forEach(i => i.includedBy.sort((a, b) => a.localeCompare(b)));
+	const byFileName = (a: string, b: string) => {
+		const nameA = a.replace(/.*[\\/]/, '');
+		const nameB = b.replace(/.*[\\/]/, '');
+		return nameA.localeCompare(nameB);
+	};
+	finalResult.includes.forEach(i => i.includedBy.sort(byFileName));
+	finalResult.cumulatedIncludes.forEach(i => i.includedBy.sort(byFileName));
 
 	return finalResult;
 }
