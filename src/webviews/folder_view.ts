@@ -34,6 +34,10 @@ let expandedItems = new Set<number>();
 let itemYPositions: number[] = [];
 let selectedIndex: number | null = null;
 
+const ANIM_DURATION = 180;
+const animatingItems = new Map<number, { startTime: number; expanding: boolean }>();
+let animFrameId: number | null = null;
+
 const tabDescriptions: Record<string, string> = {
 	'Files': 'Translation units sorted by total compilation time — spot which files are the biggest bottlenecks in your build.',
 	'Includes': 'Headers sorted by their own parse time — large headers that are inherently expensive to process.',
@@ -58,10 +62,11 @@ const topOffset = 10;
 
 function getItemHeight(index: number): number {
 	const item = currentList[index];
-	if (expandedItems.has(index) && item.includedBy?.length) {
-		return itemFullHeight + item.includedBy.length * subItemHeight + 8;
-	}
-	return itemFullHeight;
+	if (!item.includedBy?.length) { return itemFullHeight; }
+	const p = getExpandProgress(index);
+	if (p <= 0) { return itemFullHeight; }
+	if (p >= 1) { return itemFullHeight + item.includedBy.length * subItemHeight + 8; }
+	return itemFullHeight + Math.round(p * (item.includedBy.length * subItemHeight + 8));
 }
 
 function computeItemPositions(): void {
@@ -141,6 +146,8 @@ function render(): void {
 
 	currentList = list;
 	expandedItems.clear();
+	animatingItems.clear();
+	if (animFrameId !== null) { cancelAnimationFrame(animFrameId); animFrameId = null; }
 	selectedIndex = null;
 	computeItemPositions();
 
@@ -170,11 +177,9 @@ function drawList(): void {
 
 		const boxWidth = Math.max((itemTime / maxTime) * (maxCanvasWidth - 100), 150);
 		const isExpandable = currentView !== 'Files' && item.includedBy?.length > 0;
-		const isExpanded = expandedItems.has(i);
-
-		const expandedListHeight = isExpanded && item.includedBy?.length
-			? item.includedBy.length * subItemHeight + 8
-			: 0;
+		const expandProgress = getExpandProgress(i);
+		const maxExpandHeight = item.includedBy?.length ? item.includedBy.length * subItemHeight + 8 : 0;
+		const expandedListHeight = Math.round(expandProgress * maxExpandHeight);
 		const totalBoxHeight = boxHeight + expandedListHeight;
 
 		ctx.fillStyle = '#2d2d2d';
@@ -200,7 +205,7 @@ function drawList(): void {
 		} else {
 			ctx.fillStyle = '#888888';
 			ctx.font = '10px sans-serif';
-			const arrow = isExpandable ? (isExpanded ? '▼ ' : '▶ ') : '';
+			const arrow = isExpandable ? (expandProgress > 0.5 ? '▼ ' : '▶ ') : '';
 			ctx.fillText(`${arrow}${item.count} inclusion${item.count > 1 ? 's' : ''}`, 20, screenTop + 34);
 		}
 
@@ -209,8 +214,12 @@ function drawList(): void {
 		const timeStr = `${(itemTime / 1000).toFixed(1)} ms`;
 		ctx.fillText(timeStr, 10 + boxWidth + 10, screenTop + 25);
 
-		if (isExpanded && item.includedBy?.length) {
+		if (expandProgress > 0 && item.includedBy?.length) {
 			const listTop = screenTop + boxHeight;
+			ctx.save();
+			ctx.beginPath();
+			ctx.rect(10, listTop, boxWidth, expandedListHeight);
+			ctx.clip();
 			ctx.font = '11px sans-serif';
 			item.includedBy.forEach((srcPath: string, j: number) => {
 				const srcName = srcPath.split(/[\\/]/).pop() || srcPath;
@@ -220,6 +229,7 @@ function drawList(): void {
 				ctx.fillStyle = '#cccccc';
 				ctx.fillText(srcName, 24, rowY + 14);
 			});
+			ctx.restore();
 		}
 
 		if (selectedIndex === i) {
@@ -295,12 +305,8 @@ canvas.addEventListener('click', (e) => {
 	if (currentView !== 'Files' && item.includedBy?.length) {
 		const relY = realY - itemYPositions[index];
 		if (relY >= 24 && relY <= 38 && mouseX >= 18 && mouseX <= 34) {
-			if (expandedItems.has(index)) {
-				expandedItems.delete(index);
-			} else {
-				expandedItems.add(index);
-			}
-			computeItemPositions();
+			toggleExpand(index);
+			return;
 		}
 	}
 
@@ -324,14 +330,8 @@ canvas.addEventListener('dblclick', (e) => {
 
 	if (currentView !== 'Files') {
 		if (item.includedBy?.length) {
-			if (expandedItems.has(index)) {
-				expandedItems.delete(index);
-			} else {
-				expandedItems.add(index);
-			}
-			computeItemPositions();
+			toggleExpand(index);
 			selectedIndex = index;
-			requestAnimationFrame(drawList);
 		}
 		return;
 	}
@@ -401,7 +401,55 @@ document.getElementById('menu-copy-path')?.addEventListener('click', () => {
 
 // --- HELPERS ---
 
+function easeOut(t: number): number {
+	return 1 - (1 - t) * (1 - t);
+}
 
+function easeOutInverse(p: number): number {
+	return 1 - Math.sqrt(Math.max(0, 1 - p));
+}
+
+function getExpandProgress(index: number): number {
+	const anim = animatingItems.get(index);
+	if (anim) {
+		const t = Math.min((performance.now() - anim.startTime) / ANIM_DURATION, 1);
+		return anim.expanding ? easeOut(t) : 1 - easeOut(t);
+	}
+	return expandedItems.has(index) ? 1 : 0;
+}
+
+function toggleExpand(index: number): void {
+	const item = currentList[index];
+	if (!item.includedBy?.length) { return; }
+
+	const expanding = !expandedItems.has(index);
+	const currentProgress = getExpandProgress(index);
+	if (expanding) { expandedItems.add(index); }
+
+	const startProgress = expanding ? currentProgress : (1 - currentProgress);
+	const tOffset = easeOutInverse(startProgress) * ANIM_DURATION;
+	animatingItems.set(index, { startTime: performance.now() - tOffset, expanding });
+
+	if (!animFrameId) {
+		animFrameId = requestAnimationFrame(animateFrame);
+	}
+}
+
+function animateFrame(): void {
+	const now = performance.now();
+	let anyActive = false;
+	for (const [index, anim] of animatingItems) {
+		if (now - anim.startTime >= ANIM_DURATION) {
+			animatingItems.delete(index);
+			if (!anim.expanding) { expandedItems.delete(index); }
+		} else {
+			anyActive = true;
+		}
+	}
+	computeItemPositions();
+	drawList();
+	animFrameId = anyActive ? requestAnimationFrame(animateFrame) : null;
+}
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number, fill: boolean, stroke: boolean) {
 	ctx.beginPath();
