@@ -2,6 +2,12 @@
 
 All notable changes to the "clang-time-tracer" extension will be documented in this file.
 
+## [1.2.0]
+- Folder view (Heavy Headers / Header Impact): double-click on an item expands/collapses its inclusion list
+- Folder view (Heavy Headers / Header Impact): expand/collapse is now animated
+- Folder view (Heavy Headers / Header Impact): inclusion list sorted alphabetically by filename
+- Build progress notification: long filenames no longer cause awkward line wraps
+
 ## [1.1.2]
 - Fix robust command string parsing with proper quote and escape handling
 
