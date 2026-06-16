@@ -308,8 +308,6 @@ canvas.addEventListener('click', (e) => {
 });
 
 canvas.addEventListener('dblclick', (e) => {
-	if (currentView !== 'Files') { return; }
-
 	const rect = canvas.getBoundingClientRect();
 	const mouseX = e.clientX - rect.left;
 	const realY = e.clientY - rect.top + container.scrollTop;
@@ -322,7 +320,23 @@ canvas.addEventListener('dblclick', (e) => {
 	const maxTime = Math.max(...currentList.map((f: any) => f.totalTime || f.maxTime || 0));
 	const boxWidth = Math.max((itemTime / maxTime) * (canvas.width - 40 - 100), 150);
 
-	if (mouseX >= 10 && mouseX <= 10 + boxWidth && vscode) {
+	if (mouseX < 10 || mouseX > 10 + boxWidth) { return; }
+
+	if (currentView !== 'Files') {
+		if (item.includedBy?.length) {
+			if (expandedItems.has(index)) {
+				expandedItems.delete(index);
+			} else {
+				expandedItems.add(index);
+			}
+			computeItemPositions();
+			selectedIndex = index;
+			requestAnimationFrame(drawList);
+		}
+		return;
+	}
+
+	if (vscode) {
 		selectedIndex = index;
 		requestAnimationFrame(drawList);
 		vscode.postMessage({ command: 'openTrace', path: item.tracePath });
