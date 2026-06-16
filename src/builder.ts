@@ -142,7 +142,7 @@ export async function buildMultipleEntries(entries: CompileEntry[], outputChanne
 
 	await vscode.window.withProgress({
 		location: vscode.ProgressLocation.Notification,
-		title: "Clang Time Tracer: Batch Compilation",
+		title: "Tracing",
 		cancellable: true
 	}, async (progress, token) => {
 
@@ -176,7 +176,6 @@ export async function buildMultipleEntries(entries: CompileEntry[], outputChanne
 
 				cp.on('close', (code) => {
 					completed++;
-					const percent = Math.round((completed / total) * 100);
 					const status = code === 0 ? "" : " [ERROR]";
 					const fileName = path.basename(entry.file);
 
@@ -189,10 +188,10 @@ export async function buildMultipleEntries(entries: CompileEntry[], outputChanne
 					else {
 						progress.report({
 							increment: (1 / total) * 100,
-							message: `${percent}% - ${fileName}`
+							message: `${fileName}`
 						});
 						const sourcePath = path.isAbsolute(entry.file) ? entry.file : path.resolve(entry.directory, entry.file);
-					generatedTracePaths.push({ tracePath, sourcePath });
+						generatedTracePaths.push({ tracePath, sourcePath });
 						resolve(runNext());
 					}
 				});
