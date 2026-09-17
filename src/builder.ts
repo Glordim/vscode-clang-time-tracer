@@ -74,11 +74,15 @@ function getTraceFilePath(entry: CompileEntry, args: string[]): string {
 		if (arg.startsWith('/Fo')) {
 			objPath = arg.substring(3);
 			break;
-		} else if (arg === '-o' || arg === '/Fo') {
+		} else if (arg === '-o' || arg === '/clang:-o' || arg === '/Fo') {
 			objPath = args[i + 1];
 			break;
 		} else if (arg.startsWith('-o')) {
 			objPath = arg.substring(2);
+			break;
+		}
+		else if (arg.startsWith('/clang:-o')) {
+			objPath = arg.substring(9);
 			break;
 		}
 	}
