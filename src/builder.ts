@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as os from 'os';
+import * as fs from 'fs';
 import path from "path";
 import { spawn } from 'child_process';
 import { CompileEntry } from "./compilationDatabase";
@@ -97,13 +98,14 @@ function getTraceFilePath(entry: CompileEntry, args: string[]): string {
 		: path.resolve(entry.directory, tracePath);
 }
 
-
 export async function buildEntry(entry: CompileEntry, outputChannel: vscode.OutputChannel): Promise<[boolean, string]> {
 	const isClangCl = (entry.command || entry.arguments?.[0] || "").includes('clang-cl');
 	const extraArg = isClangCl ? "/clang:-ftime-trace" : "-ftime-trace";
 
 	const { exe, args } = prepareArguments(entry, extraArg);
 	const tracePath = getTraceFilePath(entry, args);
+
+	fs.mkdirSync(path.dirname(tracePath), { recursive: true });
 
 	outputChannel.clear();
 	outputChannel.show(true);
@@ -163,6 +165,8 @@ export async function buildMultipleEntries(entries: CompileEntry[], outputChanne
 			const extraArg = isClangCl ? "/clang:-ftime-trace" : "-ftime-trace";
 			const { exe, args } = prepareArguments(entry, extraArg);
 			const tracePath = getTraceFilePath(entry, args);
+
+			fs.mkdirSync(path.dirname(tracePath), { recursive: true });
 
 			return new Promise((resolve) => {
 				const cp = spawn(exe, args, { cwd: entry.directory });
