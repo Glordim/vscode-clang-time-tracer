@@ -2,6 +2,10 @@
 
 All notable changes to the "clang-time-tracer" extension will be documented in this file.
 
+## [1.2.1]
+- Fix missing output directory not being created before writing the trace file (.o/.json)
+- Fix clang-cl output argument parsing (support `/clang:-o`)
+
 ## [1.2.0]
 - Folder view (Heavy Headers / Header Impact): double-click on an item expands/collapses its inclusion list
 - Folder view (Heavy Headers / Header Impact): expand/collapse is now animated
