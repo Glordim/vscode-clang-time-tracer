@@ -28,6 +28,7 @@ Defaults to the `build` folder.
 ### 1. File Level: Deep Dive Analysis
 Perfect for optimizing a specific source file that feels sluggish.
 * **How to run**: Open a C++ file and run the command `Clang Time Tracer: Trace file`.
+* **Headers**: `Trace file` also works on a header (`.h`, `.hpp`, `.inl`, ...). Headers have no entry of their own in `compile_commands.json`, so the extension borrows the compile command of the closest source file (same name if there is one, otherwise the nearest directory) and compiles the header on its own. This is a best guess, not an exact science: the borrowed flags may not match how the header is really used, and a header that is not self-contained will fail to compile. The source file used is shown in the **Output** panel.
 * **Result**: Launches an interactive timeline of the compilation process.
 * **Navigation**: Use **Mouse Wheel** to zoom and **Click & Drag** to pan.
 
