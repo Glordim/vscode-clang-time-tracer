@@ -2,6 +2,11 @@
 
 All notable changes to the "clang-time-tracer" extension will be documented in this file.
 
+## [1.3.0]
+- Trace file: add header support (`.h`, `.hpp`, `.inl`, ...) using the compile command of the closest source file
+- Add retrace_file command (Re-run last trace file)
+- Add retrace_folder command (Re-run last trace folder)
+
 ## [1.2.1]
 - Fix missing output directory not being created before writing the trace file (.o/.json)
 - Fix clang-cl output argument parsing (support `/clang:-o`)
