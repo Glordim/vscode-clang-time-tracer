@@ -29,6 +29,7 @@ Defaults to the `build` folder.
 Perfect for optimizing a specific source file that feels sluggish.
 * **How to run**: Open a C++ file and run the command `Clang Time Tracer: Trace file`.
 * **Headers**: `Trace file` also works on a header (`.h`, `.hpp`, `.inl`, ...). Headers have no entry of their own in `compile_commands.json`, so the extension borrows the compile command of the closest source file (same name if there is one, otherwise the nearest directory) and compiles the header on its own. This is a best guess, not an exact science: the borrowed flags may not match how the header is really used, and a header that is not self-contained will fail to compile. The source file used is shown in the **Output** panel.
+* **Re-run**: `Clang Time Tracer: Re-run last trace file` traces the last traced file again, whatever the active editor is.
 * **Result**: Launches an interactive timeline of the compilation process.
 * **Navigation**: Use **Mouse Wheel** to zoom and **Click & Drag** to pan.
 
@@ -39,6 +40,7 @@ Ideal for identifying project-wide bottlenecks and finding candidates for Precom
 * **How to run**: 
 	* Right-click any folder in the **Explorer** and select `Clang Time Tracer: Trace folder`.
 	* OR run `Clang Time Tracer: Trace folder` from the Command Palette (a folder picker will help you target the directory).
+* **Re-run**: `Clang Time Tracer: Re-run last trace folder` traces the last traced folder again, without going through the folder picker.
 * **Result**: Analyzes all generated trace files in the folder and opens a dashboard with three specialized visualizers:
 	* **Slow Files**: Identifies the source files that take the longest to compile. *Double-click a file to open its detailed trace timeline.*
 	* **Heavy Headers**: Highlights headers with the highest "self-time" (cost of parsing the header itself).

@@ -8,16 +8,15 @@ import { TraceFilePanel } from './panels/filePanel';
 import { TraceFolderPanel } from './panels/folderPanel';
 import { pickFolderIntegrated } from './ui';
 
+const LAST_TRACE_FILE_KEY = 'lastTraceFile';
+const LAST_TRACE_FOLDER_KEY = 'lastTraceFolder';
+
 export function activate(context: vscode.ExtensionContext) {
 	const outputChannel = vscode.window.createOutputChannel("Clang Time Tracer");
 	const db = new CompilationDatabase(outputChannel);
 	context.subscriptions.push(outputChannel, db);
 
-	const traceFile = vscode.commands.registerCommand('clang_time_tracer.trace_file', async () => {
-		const editor = vscode.window.activeTextEditor;
-		if (!editor) { return; }
-
-		const uri = editor.document.uri;
+	const runTraceFile = async (uri: vscode.Uri) => {
 		let entry = await db.getEntryForFile(uri);
 		const isHeader = !entry && isHeaderFile(uri);
 		if (isHeader) {
@@ -27,6 +26,8 @@ export function activate(context: vscode.ExtensionContext) {
 			vscode.window.showErrorMessage("No compile command found for this file in compile_commands.json");
 			return;
 		}
+
+		await context.workspaceState.update(LAST_TRACE_FILE_KEY, uri.toString());
 
 		outputChannel.clear();
 		outputChannel.show(true);
@@ -42,25 +43,36 @@ export function activate(context: vscode.ExtensionContext) {
 				outputChannel.appendLine(`[Error] Trace file not found at: ${tracePath}`);
 			}
 		}
+	};
+
+	const traceFile = vscode.commands.registerCommand('clang_time_tracer.trace_file', async () => {
+		const editor = vscode.window.activeTextEditor;
+		if (!editor) { return; }
+
+		await runTraceFile(editor.document.uri);
 	});
 
-	context.subscriptions.push(traceFile);
-
-	const traceFolder = vscode.commands.registerCommand('clang_time_tracer.trace_folder', async (uri?: vscode.Uri) => {
-		let targetUri = uri;
-
-		if (!targetUri) {
-			targetUri = await pickFolderIntegrated();
+	const retraceFile = vscode.commands.registerCommand('clang_time_tracer.retrace_file', async () => {
+		const lastUri = context.workspaceState.get<string>(LAST_TRACE_FILE_KEY);
+		if (!lastUri) {
+			vscode.window.showInformationMessage("No previous file trace to re-run.");
+			return;
 		}
 
-		if (!targetUri) { return; }
+		await runTraceFile(vscode.Uri.parse(lastUri));
+	});
 
+	context.subscriptions.push(traceFile, retraceFile);
+
+	const runTraceFolder = async (targetUri: vscode.Uri) => {
 		const entries = db.getAllEntriesInFolder(targetUri);
 
 		if (entries.length === 0) {
 			vscode.window.showWarningMessage("No files found in the compilation database for this folder.");
 			return;
 		}
+
+		await context.workspaceState.update(LAST_TRACE_FOLDER_KEY, targetUri.toString());
 
 		outputChannel.clear();
 		outputChannel.show(true);
@@ -74,7 +86,29 @@ export function activate(context: vscode.ExtensionContext) {
 				path.basename(targetUri.fsPath)
 			);
 		}
+	};
+
+	const traceFolder = vscode.commands.registerCommand('clang_time_tracer.trace_folder', async (uri?: vscode.Uri) => {
+		let targetUri = uri;
+
+		if (!targetUri) {
+			targetUri = await pickFolderIntegrated();
+		}
+
+		if (!targetUri) { return; }
+
+		await runTraceFolder(targetUri);
 	});
 
-	context.subscriptions.push(traceFolder);
+	const retraceFolder = vscode.commands.registerCommand('clang_time_tracer.retrace_folder', async () => {
+		const lastUri = context.workspaceState.get<string>(LAST_TRACE_FOLDER_KEY);
+		if (!lastUri) {
+			vscode.window.showInformationMessage("No previous folder trace to re-run.");
+			return;
+		}
+
+		await runTraceFolder(vscode.Uri.parse(lastUri));
+	});
+
+	context.subscriptions.push(traceFolder, retraceFolder);
 }

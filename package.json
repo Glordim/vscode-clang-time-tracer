@@ -29,6 +29,16 @@
 				"command": "clang_time_tracer.trace_folder",
 				"title": "Trace folder",
 				"category": "Clang Time Tracer"
+			},
+			{
+				"command": "clang_time_tracer.retrace_file",
+				"title": "Re-run last trace file",
+				"category": "Clang Time Tracer"
+			},
+			{
+				"command": "clang_time_tracer.retrace_folder",
+				"title": "Re-run last trace folder",
+				"category": "Clang Time Tracer"
 			}
 		],
 		"menus": {
