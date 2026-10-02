@@ -9,6 +9,12 @@ export interface CompileEntry {
 	file: string;
 }
 
+const HEADER_EXTENSIONS = new Set(['.h', '.hh', '.hpp', '.hxx', '.h++', '.inl', '.ipp', '.tpp', '.tcc']);
+
+export function isHeaderFile(uri: vscode.Uri): boolean {
+	return HEADER_EXTENSIONS.has(path.extname(uri.fsPath).toLowerCase());
+}
+
 export class CompilationDatabase implements vscode.Disposable {
 	private entries = new Map<string, CompileEntry>();
 	private watcher?: vscode.FileSystemWatcher;
@@ -86,6 +92,36 @@ export class CompilationDatabase implements vscode.Disposable {
 	public async getEntryForFile(uri: vscode.Uri): Promise<CompileEntry | undefined> {
 		await this.loadingPromise;
 		return this.entries.get(uri.toString());
+	}
+
+	// Headers have no entry of their own: borrow the flags of the closest source file
+	// (same name if possible, otherwise the one sharing the longest directory prefix).
+	public async getEntryForHeader(uri: vscode.Uri): Promise<CompileEntry | undefined> {
+		await this.loadingPromise;
+
+		const header = path.parse(uri.fsPath.toLowerCase());
+		const headerDirs = header.dir.split(path.sep);
+		let bestEntry: CompileEntry | undefined;
+		let bestScore = -1;
+
+		for (const [uriStr, entry] of this.entries.entries()) {
+			const source = path.parse(vscode.Uri.parse(uriStr).fsPath.toLowerCase());
+			const sourceDirs = source.dir.split(path.sep);
+
+			let score = 0;
+			while (score < headerDirs.length && score < sourceDirs.length && headerDirs[score] === sourceDirs[score]) {
+				score++;
+			}
+			if (source.name === header.name) {
+				score += 1000;
+			}
+
+			if (score > bestScore) {
+				bestScore = score;
+				bestEntry = entry;
+			}
+		}
+		return bestEntry;
 	}
 
 	public getAllEntriesInFolder(folderUri: vscode.Uri): CompileEntry[] {

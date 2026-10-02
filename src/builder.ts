@@ -66,26 +66,100 @@ function prepareArguments(entry: CompileEntry, extraArg: string): { exe: string,
 	return { exe, args };
 }
 
-function getTraceFilePath(entry: CompileEntry, args: string[]): string {
-	let objPath = "";
-
+function findOutputArg(args: string[]): { index: number, count: number, value: string } | undefined {
 	for (let i = 0; i < args.length; i++) {
 		const arg = args[i];
 		if (arg.startsWith('/Fo')) {
-			objPath = arg.substring(3);
-			break;
+			return { index: i, count: 1, value: arg.substring(3) };
 		} else if (arg === '-o' || arg === '/clang:-o' || arg === '/Fo') {
-			objPath = args[i + 1];
-			break;
+			return { index: i, count: 2, value: args[i + 1] ?? "" };
 		} else if (arg.startsWith('-o')) {
-			objPath = arg.substring(2);
-			break;
+			return { index: i, count: 1, value: arg.substring(2) };
 		}
 		else if (arg.startsWith('/clang:-o')) {
-			objPath = arg.substring(9);
-			break;
+			return { index: i, count: 1, value: arg.substring(9) };
 		}
 	}
+	return undefined;
+}
+
+// Dependency files (-MD -MF foo.d ...) belong to the borrowed source file: don't overwrite them.
+// With clang-cl only the /clang: forms are dependency flags (-MD / -MT select the runtime library).
+function stripDependencyArgs(args: string[], isClangCl: boolean): string[] {
+	const result: string[] = [];
+
+	for (let i = 0; i < args.length; i++) {
+		const arg = args[i];
+		let flag = arg;
+		if (isClangCl) {
+			if (!arg.startsWith('/clang:')) { result.push(arg); continue; }
+			flag = arg.substring(7);
+		}
+
+		if (/^-M[FTQJ]$/.test(flag)) {
+			i++;
+		} else if (!/^-M([FTQJ].+|M?D?|[PGV])$/.test(flag)) {
+			result.push(arg);
+		}
+	}
+	return result;
+}
+
+function isSamePath(a: string, b: string): boolean {
+	// Windows and macOS file systems are case-insensitive by default.
+	const caseInsensitive = process.platform === 'win32' || process.platform === 'darwin';
+	return caseInsensitive ? a.toLowerCase() === b.toLowerCase() : a === b;
+}
+
+const HEADER_LANGUAGES: Record<string, string> = { '.c': 'c', '.m': 'objective-c', '.mm': 'objective-c++' };
+
+// Turns the compile command of a source file into one that compiles `headerPath` as if it were a source file.
+function makeHeaderEntry(entry: CompileEntry, headerPath: string, isClangCl: boolean): CompileEntry | undefined {
+	const parts = entry.arguments && entry.arguments.length > 0 ? entry.arguments : splitCommand(entry.command ?? "");
+	const exe = parts[0] ?? "";
+	const args = stripDependencyArgs(parts.slice(1), isClangCl);
+
+	// Give the header its own output so the object file (and trace) of the borrowed source is left untouched.
+	const output = findOutputArg(args);
+	const oldOutput = (output?.value ?? "").replace(/^['"]|['"]$/g, '');
+	if (output) {
+		args.splice(output.index, output.count);
+	}
+	const isOutputDir = /[\\/]$/.test(oldOutput);
+	const outputDir = isOutputDir ? oldOutput : path.dirname(oldOutput);
+	const outputExt = (!isOutputDir && path.extname(oldOutput)) || (isClangCl ? '.obj' : '.o');
+	const newOutput = path.join(outputDir, path.basename(headerPath) + outputExt);
+
+	const sourcePath = path.resolve(entry.directory, entry.file);
+	const sourceIndex = args.findIndex(arg => isSamePath(path.resolve(entry.directory, arg), sourcePath));
+	if (sourceIndex === -1) {
+		return undefined;
+	}
+	args[sourceIndex] = headerPath;
+
+	const language = HEADER_LANGUAGES[path.extname(entry.file).toLowerCase()] ?? 'c++';
+	let extraArgs: string[];
+	if (isClangCl) {
+		// A repeated /TP or /TC triggers -Woverriding-option, so only add it when missing.
+		const languageArg = language === 'c' ? 'TC' : 'TP';
+		const hasLanguageArg = args.includes('/' + languageArg) || args.includes('-' + languageArg);
+		extraArgs = hasLanguageArg ? [] : ['/' + languageArg];
+		extraArgs.push(`/Fo${newOutput}`);
+	} else {
+		extraArgs = ['-x', language, '-o', newOutput];
+	}
+	extraArgs.push('-Wno-pragma-once-outside-header');
+
+	// Everything after "--" is an input file, so the flags must go before it.
+	const separatorIndex = args.indexOf('--');
+	const insertIndex = separatorIndex !== -1 && separatorIndex < sourceIndex ? separatorIndex : sourceIndex;
+	args.splice(insertIndex, 0, ...extraArgs);
+
+	return { arguments: [exe, ...args], directory: entry.directory, file: headerPath };
+}
+
+function getTraceFilePath(entry: CompileEntry, args: string[]): string {
+	let objPath = findOutputArg(args)?.value ?? "";
 
 	let tracePath = "";
 	if (objPath) {
@@ -111,9 +185,6 @@ export async function buildEntry(entry: CompileEntry, outputChannel: vscode.Outp
 
 	fs.mkdirSync(path.dirname(tracePath), { recursive: true });
 
-	outputChannel.clear();
-	outputChannel.show(true);
-
 	outputChannel.appendLine(`[CWD] ${entry.directory}`);
 	outputChannel.appendLine(`[Exec] ${exe} ${args.join(' ')}`);
 
@@ -138,6 +209,21 @@ export async function buildEntry(entry: CompileEntry, outputChannel: vscode.Outp
 			resolve([false, tracePath]);
 		});
 	});
+}
+
+// `entry` is the source file whose compile command is borrowed to compile the header.
+export async function buildHeader(entry: CompileEntry, headerPath: string, outputChannel: vscode.OutputChannel): Promise<[boolean, string]> {
+	const isClangCl = (entry.command || entry.arguments?.[0] || "").includes('clang-cl');
+
+	const headerEntry = makeHeaderEntry(entry, headerPath, isClangCl);
+	if (!headerEntry) {
+		outputChannel.appendLine(`[Error] Unable to find ${entry.file} in its compile command.`);
+		vscode.window.showErrorMessage(`Unable to adapt the compile command of ${path.basename(entry.file)} for this header`);
+		return [false, ""];
+	}
+
+	outputChannel.appendLine(`[Header] Using the compile command of ${entry.file}`);
+	return buildEntry(headerEntry, outputChannel);
 }
 
 export async function buildMultipleEntries(entries: CompileEntry[], outputChannel: vscode.OutputChannel): Promise<[boolean, { tracePath: string, sourcePath: string }[]]> {

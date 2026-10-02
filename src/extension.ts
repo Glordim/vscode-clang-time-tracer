@@ -1,8 +1,8 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
-import { CompilationDatabase } from './compilationDatabase';
-import { buildEntry, buildMultipleEntries } from './builder';
+import { CompilationDatabase, isHeaderFile } from './compilationDatabase';
+import { buildEntry, buildHeader, buildMultipleEntries } from './builder';
 import { collectAndMergeTrace } from './analyzer';
 import { TraceFilePanel } from './panels/filePanel';
 import { TraceFolderPanel } from './panels/folderPanel';
@@ -17,13 +17,23 @@ export function activate(context: vscode.ExtensionContext) {
 		const editor = vscode.window.activeTextEditor;
 		if (!editor) { return; }
 
-		const entry = await db.getEntryForFile(editor.document.uri);
+		const uri = editor.document.uri;
+		let entry = await db.getEntryForFile(uri);
+		const isHeader = !entry && isHeaderFile(uri);
+		if (isHeader) {
+			entry = await db.getEntryForHeader(uri);
+		}
 		if (!entry) {
 			vscode.window.showErrorMessage("No compile command found for this file in compile_commands.json");
 			return;
 		}
 
-		const [result, tracePath] = await buildEntry(entry, outputChannel);
+		outputChannel.clear();
+		outputChannel.show(true);
+
+		const [result, tracePath] = isHeader
+			? await buildHeader(entry, uri.fsPath, outputChannel)
+			: await buildEntry(entry, outputChannel);
 
 		if (result) {
 			if (fs.existsSync(tracePath)) {
